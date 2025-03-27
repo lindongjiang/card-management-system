@@ -279,10 +279,9 @@ class CardModel {
   async getAllBindings() {
     try {
       const [rows] = await pool.execute(`
-        SELECT b.id, b.udid, b.created_at, c.card_key, c.used, c.used_at, a.name as app_name
+        SELECT b.id, b.udid, b.created_at, c.card_key, c.used, c.used_at
         FROM bindings b
         JOIN cards c ON b.card_id = c.id
-        JOIN apps a ON b.app_id = a.id
         ORDER BY b.created_at DESC
       `);
       return rows;
@@ -318,13 +317,6 @@ class CardModel {
         return { success: false, message: '卡密已过期' };
       }
       
-      // 获取一个默认的app_id（因为app_id是必须的）
-      const [apps] = await pool.execute('SELECT id FROM apps LIMIT 1');
-      if (apps.length === 0) {
-        return { success: false, message: '没有可用的应用，请先添加应用' };
-      }
-      const defaultAppId = apps[0].id;
-      
       // 开始事务
       const connection = await pool.getConnection();
       await connection.beginTransaction();
@@ -336,10 +328,10 @@ class CardModel {
           [card.id]
         );
         
-        // 创建UDID绑定 - 包含必要的app_id字段
+        // 创建UDID绑定 - 不再需要app_id字段
         await connection.execute(
-          'INSERT INTO bindings (udid, card_id, app_id) VALUES (?, ?, ?)',
-          [udid, card.id, defaultAppId]
+          'INSERT INTO bindings (udid, card_id) VALUES (?, ?)',
+          [udid, card.id]
         );
         
         await connection.commit();

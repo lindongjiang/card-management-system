@@ -95,5 +95,55 @@ async function initDatabase() {
 
 module.exports = {
   pool,
-  initDatabase
+  initDatabase,
+  // 添加迁移函数，用于修复bindings表结构
+  async fixBindingsTable() {
+    try {
+      const connection = await pool.getConnection();
+      console.log('开始修复bindings表结构...');
+      
+      // 检查bindings表是否存在app_id列
+      const [columns] = await connection.execute(`
+        SHOW COLUMNS FROM bindings LIKE 'app_id'
+      `);
+      
+      // 如果存在app_id列，则移除
+      if (columns.length > 0) {
+        console.log('检测到bindings表中存在app_id列，正在移除...');
+        
+        // 检查是否存在外键约束
+        const [constraints] = await connection.execute(`
+          SELECT CONSTRAINT_NAME 
+          FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+          WHERE TABLE_NAME = 'bindings' 
+          AND COLUMN_NAME = 'app_id' 
+          AND CONSTRAINT_NAME != 'PRIMARY'
+        `);
+        
+        // 如果存在外键约束，先移除约束
+        if (constraints.length > 0) {
+          for (const constraint of constraints) {
+            await connection.execute(`
+              ALTER TABLE bindings DROP FOREIGN KEY ${constraint.CONSTRAINT_NAME}
+            `);
+          }
+        }
+        
+        // 移除app_id列
+        await connection.execute(`
+          ALTER TABLE bindings DROP COLUMN app_id
+        `);
+        
+        console.log('成功移除bindings表中的app_id列');
+      } else {
+        console.log('bindings表结构正常，无需修复');
+      }
+      
+      connection.release();
+      return { success: true, message: 'bindings表结构修复完成' };
+    } catch (error) {
+      console.error('修复bindings表结构错误:', error);
+      return { success: false, message: error.message };
+    }
+  }
 }; 

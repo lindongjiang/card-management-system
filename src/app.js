@@ -2,6 +2,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { initDatabase } = require('./config/database');
 const appRoutes = require('./routes/appRoutes');
 const cardRoutes = require('./routes/cardRoutes');
@@ -11,11 +13,43 @@ const clientRoutes = require('./routes/clientRoutes');
 const appModel = require('./models/appModel');
 const cardModel = require('./models/cardModel');
 
+// 强制使用6677端口
+const PORT = 6677;
+
 // 初始化应用
 const app = express();
 
 // 初始化数据库
-initDatabase();
+async function initialize() {
+  console.log('开始启动服务器...');
+  
+  // 初始化数据库
+  await initDatabase();
+  
+  // 创建上传目录
+  const uploadDir = path.join(__dirname, '../public/uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+  
+  // 创建应用图标目录
+  const iconDir = path.join(__dirname, '../public/uploads/icons');
+  if (!fs.existsSync(iconDir)) {
+    fs.mkdirSync(iconDir, { recursive: true });
+  }
+  
+  // 创建IPA存储目录
+  const ipaDir = path.join(__dirname, '../public/uploads/ipas');
+  if (!fs.existsSync(ipaDir)) {
+    fs.mkdirSync(ipaDir, { recursive: true });
+  }
+  
+  // 创建plist文件目录
+  const plistDir = path.join(__dirname, '../public/uploads/plists');
+  if (!fs.existsSync(plistDir)) {
+    fs.mkdirSync(plistDir, { recursive: true });
+  }
+}
 
 // 中间件
 app.use(cors());
@@ -80,15 +114,13 @@ async function createTestApp() {
   }
 }
 
-// 调用创建测试应用函数
-createTestApp();
-
-// 强制使用6677端口
-const PORT = 6677;
-
 // 启动服务器函数
-const startServer = () => {
-  console.log('开始启动服务器...');
+const startServer = async () => {
+  // 初始化数据库和修复表结构
+  await initialize();
+  
+  // 创建测试数据
+  await createTestApp();
   
   // 确保旧的服务器实例被清理
   const server = app.listen(PORT, () => {

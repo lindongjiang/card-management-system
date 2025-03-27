@@ -24,7 +24,7 @@ class ClientController {
   async getAppDetail(req, res) {
     try {
       const { id } = req.params;
-      const { udid } = req.body;
+      const { udid } = req.query;
       
       if (!udid) {
         return res.status(400).json({

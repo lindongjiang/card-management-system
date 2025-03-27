@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/apps', clientController.getApps);
 
 // 获取应用详情（需要UDID验证权限）
-router.post('/apps/:id/detail', clientController.getAppDetail);
+router.get('/apps/:id', clientController.getAppDetail);
 
 // 验证卡密并绑定UDID
 router.post('/verify', clientController.verifyAndBind);

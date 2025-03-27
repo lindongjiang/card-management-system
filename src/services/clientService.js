@@ -27,7 +27,8 @@ class ClientService {
       }
 
       // 检查应用是否需要卡密
-      if (!app.requires_key) {
+      // 数字0或boolean false都应当视为不需要卡密
+      if (app.requires_key === 0 || app.requires_key === false) {
         // 不需要卡密，直接返回完整信息
         return {
           app,
