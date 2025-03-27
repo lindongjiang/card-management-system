@@ -13,6 +13,6 @@ router.post('/apps/:id/detail', clientController.getAppDetail);
 router.post('/verify', clientController.verifyAndBind);
 
 // 检查UDID状态
-router.post('/check', clientController.checkUdidStatus);
+router.get('/check-udid', clientController.checkUdidStatus);
 
 module.exports = router; 

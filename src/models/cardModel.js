@@ -150,6 +150,22 @@ class CardModel {
     }
   }
 
+  // 获取指定UDID的所有绑定信息
+  async getBindingsByUdid(udid) {
+    try {
+      const [rows] = await pool.execute(`
+        SELECT b.*, c.card_key 
+        FROM bindings b
+        JOIN cards c ON b.card_id = c.id
+        WHERE b.udid = ?
+      `, [udid]);
+      return rows;
+    } catch (error) {
+      console.error('获取UDID绑定信息错误:', error);
+      throw error;
+    }
+  }
+
   // 获取所有卡密
   async getAllCards() {
     try {

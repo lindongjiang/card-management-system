@@ -31,6 +31,38 @@
 			</view>
 		</view>
 		
+		<!-- UDID检查区域 -->
+		<view class="udid-check-section">
+			<view class="section-title">UDID检查工具</view>
+			<view class="udid-form">
+				<input 
+					type="text" 
+					class="udid-input" 
+					v-model="udidInput" 
+					placeholder="请输入设备UDID" 
+				/>
+				<button class="check-button" @click="checkUdid">检查状态</button>
+			</view>
+			
+			<!-- 检查结果区域 -->
+			<view class="udid-result" v-if="udidResult">
+				<view class="result-item">
+					<text class="result-label">绑定状态:</text>
+					<text class="result-value" :class="{'bound': udidResult.data.bound, 'unbound': !udidResult.data.bound}">
+						{{udidResult.data.bound ? '已绑定' : '未绑定'}}
+					</text>
+				</view>
+				
+				<view class="bindings-list" v-if="udidResult.data.bound && udidResult.data.bindings.length > 0">
+					<view class="bindings-title">绑定详情:</view>
+					<view class="binding-item" v-for="(binding, index) in udidResult.data.bindings" :key="index">
+						<text class="binding-detail">卡密: {{binding.card_key}}</text>
+						<text class="binding-detail">绑定时间: {{formatDate(binding.created_at)}}</text>
+					</view>
+				</view>
+			</view>
+		</view>
+		
 		<!-- 主要导航菜单 -->
 		<!-- <view class="nav-section">
 			<view class="nav-grid">
@@ -69,7 +101,9 @@
 	export default {
 		data() {
 			return {
-				currentDate: ''
+				currentDate: '',
+				udidInput: '',
+				udidResult: null
 			}
 		},
 		computed: {
@@ -134,6 +168,28 @@
 					this.$toast('数据加载失败');
 					console.error('数据加载错误:', error);
 				}
+			},
+			
+			// 检查UDID状态
+			async checkUdid() {
+				if (!this.udidInput || this.udidInput.trim() === '') {
+					this.$toast('请输入UDID');
+					return;
+				}
+				
+				try {
+					const res = await this.$http.get(`/api/client/check-udid?udid=${encodeURIComponent(this.udidInput.trim())}`);
+					this.udidResult = res.data;
+				} catch (error) {
+					this.$toast('检查UDID失败');
+					console.error('检查UDID错误:', error);
+				}
+			},
+			
+			// 格式化日期
+			formatDate(dateString) {
+				const date = new Date(dateString);
+				return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 			},
 			
 			// 页面导航
@@ -259,5 +315,96 @@
 	.nav-name {
 		font-size: 24rpx;
 		color: #666;
+	}
+	
+	/* UDID检查样式 */
+	.udid-check-section {
+		background-color: #fff;
+		border-radius: 12rpx;
+		padding: 30rpx;
+		margin-bottom: 20rpx;
+		box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+	}
+	
+	.section-title {
+		font-size: 28rpx;
+		font-weight: bold;
+		margin-bottom: 20rpx;
+	}
+	
+	.udid-form {
+		display: flex;
+		margin-bottom: 20rpx;
+	}
+	
+	.udid-input {
+		flex: 1;
+		height: 80rpx;
+		border: 1px solid #ddd;
+		border-radius: 8rpx;
+		padding: 0 20rpx;
+		margin-right: 20rpx;
+		font-size: 26rpx;
+	}
+	
+	.check-button {
+		background-color: #007AFF;
+		color: #fff;
+		height: 80rpx;
+		line-height: 80rpx;
+		font-size: 26rpx;
+		padding: 0 30rpx;
+		border-radius: 8rpx;
+	}
+	
+	.udid-result {
+		background-color: #f5f5f5;
+		border-radius: 8rpx;
+		padding: 20rpx;
+	}
+	
+	.result-item {
+		display: flex;
+		margin-bottom: 10rpx;
+	}
+	
+	.result-label {
+		width: 150rpx;
+		font-size: 26rpx;
+		color: #666;
+	}
+	
+	.result-value {
+		flex: 1;
+		font-size: 26rpx;
+		font-weight: bold;
+	}
+	
+	.bound {
+		color: #4CD964;
+	}
+	
+	.unbound {
+		color: #FF3B30;
+	}
+	
+	.bindings-title {
+		font-size: 26rpx;
+		color: #666;
+		margin: 10rpx 0;
+	}
+	
+	.binding-item {
+		background-color: white;
+		border-radius: 8rpx;
+		padding: 10rpx 20rpx;
+		margin-bottom: 10rpx;
+	}
+	
+	.binding-detail {
+		font-size: 24rpx;
+		color: #333;
+		display: block;
+		margin: 5rpx 0;
 	}
 </style>

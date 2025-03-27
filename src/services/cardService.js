@@ -203,6 +203,17 @@ class CardService {
       throw error;
     }
   }
+
+  // 获取UDID的所有绑定信息
+  async checkUdidBindings(udid) {
+    try {
+      const bindings = await cardModel.getBindingsByUdid(udid);
+      return bindings;
+    } catch (error) {
+      console.error('获取UDID绑定信息服务错误:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new CardService();

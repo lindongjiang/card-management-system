@@ -1,6 +1,6 @@
 export default {
   // API基础URL
-  apiBaseUrl: 'http://localhost:6677',
+  apiBaseUrl: 'https://renmai.cloudmantoub.online',
   
   // 应用名称
   appName: '云服务管理系统',

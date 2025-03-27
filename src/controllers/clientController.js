@@ -86,7 +86,7 @@ class ClientController {
   // 检查UDID状态
   async checkUdidStatus(req, res) {
     try {
-      const { udid } = req.body;
+      const { udid } = req.query;
       
       if (!udid) {
         return res.status(400).json({
@@ -95,10 +95,13 @@ class ClientController {
         });
       }
       
-      const isBindingExist = await cardService.checkBinding(udid);
+      const bindingInfo = await cardService.checkUdidBindings(udid);
       res.json({
         success: true,
-        isUnlocked: isBindingExist
+        data: {
+          bound: bindingInfo.length > 0,
+          bindings: bindingInfo
+        }
       });
     } catch (error) {
       console.error('检查UDID状态错误:', error);
