@@ -19,8 +19,13 @@
 					<view class="key-requirement" :class="{'required': app.requires_key}">
 						{{app.requires_key ? '需要卡密' : '无需卡密'}}
 					</view>
-					<view class="app-manage" @click.stop="toggleKeyRequirement(app)">
-						{{app.requires_key ? '关闭卡密' : '开启卡密'}}
+					<view class="action-buttons">
+						<view class="app-manage" @click.stop="toggleKeyRequirement(app)">
+							{{app.requires_key ? '关闭卡密' : '开启卡密'}}
+						</view>
+						<view class="app-delete" @click.stop="showDeleteConfirm(app)">
+							删除
+						</view>
 					</view>
 				</view>
 			</view>
@@ -130,6 +135,42 @@
 					this.$toast('操作出错');
 					console.error('切换卡密需求状态错误:', error);
 				}
+			},
+			
+			// 显示删除确认
+			showDeleteConfirm(app) {
+				uni.showModal({
+					title: '删除确认',
+					content: `确定要删除应用"${app.name}"吗？此操作不可恢复！`,
+					confirmColor: '#FF3B30',
+					success: res => {
+						if (res.confirm) {
+							this.handleDeleteApp(app.id);
+						}
+					}
+				});
+			},
+			
+			// 删除应用
+			async handleDeleteApp(appId) {
+				if (!appId) return;
+				
+				try {
+					this.$store.commit('SET_LOADING', true);
+					const result = await this.$store.dispatch('deleteApp', appId);
+					
+					if (result && result.success) {
+						this.$toast('删除应用成功');
+						this.loadData();
+					} else {
+						this.$toast(result?.message || '删除应用失败');
+					}
+				} catch (error) {
+					this.$toast('删除应用出错');
+					console.error('删除应用错误:', error);
+				} finally {
+					this.$store.commit('SET_LOADING', false);
+				}
 			}
 		}
 	}
@@ -222,9 +263,20 @@
 		color: #fff;
 	}
 	
+	.action-buttons {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	
 	.app-manage {
 		font-size: 26rpx;
 		color: #007AFF;
+	}
+	
+	.app-delete {
+		font-size: 26rpx;
+		color: #FF3B30;
 	}
 	
 	.empty-state {

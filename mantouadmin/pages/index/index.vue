@@ -31,36 +31,35 @@
 			</view>
 		</view>
 		
-		<!-- 常用功能 -->
-		<view class="function-section">
-			<view class="section-title">常用功能</view>
-			<view class="function-grid">
-				<view class="function-item" @click="navigateTo('/pages/apps/apps')">
-					<view class="function-icon app-icon">应用</view>
-					<text class="function-name">应用管理</text>
+		<!-- 主要导航菜单 -->
+		<!-- <view class="nav-section">
+			<view class="nav-grid">
+				<view class="nav-item" @click="navigateTo('/pages/apps/apps')">
+					<view class="nav-icon app-icon">应用</view>
+					<text class="nav-name">应用管理</text>
 				</view>
 				
-				<view class="function-item" @click="navigateTo('/pages/cards/cards')">
-					<view class="function-icon card-icon">卡密</view>
-					<text class="function-name">卡密管理</text>
+				<view class="nav-item" @click="navigateTo('/pages/cards/cards')">
+					<view class="nav-icon card-icon">卡密</view>
+					<text class="nav-name">卡密管理</text>
 				</view>
 				
-				<view class="function-item" @click="navigateTo('/pages/cards/generate')">
-					<view class="function-icon generate-icon">生成</view>
-					<text class="function-name">生成卡密</text>
+				<view class="nav-item" @click="navigateTo('/pages/cards/generate')">
+					<view class="nav-icon generate-icon">生成</view>
+					<text class="nav-name">生成卡密</text>
 				</view>
 				
-				<view class="function-item" @click="navigateTo('/pages/bindings/bindings')">
-					<view class="function-icon binding-icon">绑定</view>
-					<text class="function-name">UDID绑定</text>
+				<view class="nav-item" @click="navigateTo('/pages/bindings/bindings')">
+					<view class="nav-icon binding-icon">绑定</view>
+					<text class="nav-name">UDID绑定</text>
 				</view>
 				
-				<view class="function-item" v-if="isAdmin" @click="navigateTo('/pages/user/admin')">
-					<view class="function-icon admin-icon">用户</view>
-					<text class="function-name">用户管理</text>
+				<view class="nav-item" v-if="isAdmin" @click="navigateTo('/pages/user/admin')">
+					<view class="nav-icon admin-icon">用户</view>
+					<text class="nav-name">用户管理</text>
 				</view>
 			</view>
-		</view>
+		</view> -->
 	</view>
 </template>
 
@@ -204,26 +203,19 @@
 		color: #999;
 	}
 	
-	.function-section {
+	.nav-section {
 		background-color: #fff;
 		border-radius: 12rpx;
 		padding: 30rpx;
 		box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
 	}
 	
-	.section-title {
-		font-size: 32rpx;
-		font-weight: bold;
-		margin-bottom: 30rpx;
-		color: #333;
-	}
-	
-	.function-grid {
+	.nav-grid {
 		display: flex;
 		flex-wrap: wrap;
 	}
 	
-	.function-item {
+	.nav-item {
 		width: 25%;
 		display: flex;
 		flex-direction: column;
@@ -231,7 +223,7 @@
 		margin-bottom: 30rpx;
 	}
 	
-	.function-icon {
+	.nav-icon {
 		width: 80rpx;
 		height: 80rpx;
 		background-color: #007AFF;
@@ -257,14 +249,14 @@
 	}
 	
 	.binding-icon {
-		background-color: #FF9500;
+		background-color: #5856D6;
 	}
 	
 	.admin-icon {
 		background-color: #FF3B30;
 	}
 	
-	.function-name {
+	.nav-name {
 		font-size: 24rpx;
 		color: #666;
 	}

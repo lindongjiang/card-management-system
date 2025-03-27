@@ -61,8 +61,16 @@ class AppModel {
   // 根据ID获取应用
   async getAppById(id) {
     try {
-      const [rows] = await pool.execute('SELECT * FROM apps WHERE id = ?', [id]);
-      return rows[0] || null;
+      const [rows] = await pool.execute(
+        'SELECT * FROM apps WHERE id = ?',
+        [id]
+      );
+      
+      if (rows.length === 0) {
+        return null;
+      }
+      
+      return rows[0];
     } catch (error) {
       console.error('获取应用详情错误:', error);
       throw error;
@@ -124,6 +132,8 @@ class AppModel {
         return { success: false, message: '应用不存在' };
       }
       
+      const app = apps[0];
+      
       // 开始事务
       const connection = await pool.getConnection();
       await connection.beginTransaction();
@@ -139,6 +149,9 @@ class AppModel {
         await connection.commit();
         connection.release();
         
+        // 删除本地文件
+        this.deleteLocalFiles(app);
+        
         return { success: true, message: '应用删除成功' };
       } catch (error) {
         await connection.rollback();
@@ -148,6 +161,97 @@ class AppModel {
       }
     } catch (error) {
       console.error('删除应用错误:', error);
+      throw error;
+    }
+  }
+  
+  // 删除应用关联的本地文件
+  deleteLocalFiles(app) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      
+      // 基础存储路径
+      const storagePath = path.join(__dirname, '../../public/uploads/apps');
+      const identifier = app.identifier || '';
+      
+      // 尝试删除IPA文件
+      if (app.pkg && app.pkg.includes(app.id)) {
+        try {
+          const ipaPath = path.join(storagePath, identifier, `${app.id}.ipa`);
+          if (fs.existsSync(ipaPath)) {
+            fs.unlinkSync(ipaPath);
+            console.log(`已删除IPA文件: ${ipaPath}`);
+          }
+        } catch (err) {
+          console.error(`删除IPA文件失败: ${err.message}`);
+        }
+      }
+      
+      // 尝试删除图标文件
+      if (app.icon && app.icon.includes(app.id)) {
+        try {
+          const iconPath = path.join(storagePath, identifier, `${app.id}.png`);
+          if (fs.existsSync(iconPath)) {
+            fs.unlinkSync(iconPath);
+            console.log(`已删除图标文件: ${iconPath}`);
+          }
+        } catch (err) {
+          console.error(`删除图标文件失败: ${err.message}`);
+        }
+      }
+      
+      // 尝试删除plist文件
+      if (app.plist && app.plist.includes(app.id)) {
+        try {
+          const plistPath = path.join(storagePath, '../plist', `${app.id}.plist`);
+          if (fs.existsSync(plistPath)) {
+            fs.unlinkSync(plistPath);
+            console.log(`已删除plist文件: ${plistPath}`);
+          }
+        } catch (err) {
+          console.error(`删除plist文件失败: ${err.message}`);
+        }
+      }
+      
+      // 尝试删除应用目录
+      try {
+        const appDir = path.join(storagePath, identifier);
+        if (fs.existsSync(appDir)) {
+          const files = fs.readdirSync(appDir);
+          if (files.length === 0) {
+            fs.rmdirSync(appDir);
+            console.log(`已删除空的应用目录: ${appDir}`);
+          } else {
+            console.log(`应用目录不为空，跳过删除: ${appDir}`);
+          }
+        }
+      } catch (err) {
+        console.error(`删除应用目录失败: ${err.message}`);
+      }
+    } catch (error) {
+      console.error('删除本地文件错误:', error);
+    }
+  }
+
+  // 插入测试应用（仅用于API测试）
+  async insertTestApp() {
+    try {
+      const id = 'TEST' + Date.now();
+      const [result] = await pool.execute(
+        `INSERT INTO apps 
+        (id, name, identifier, version, build, size, icon, web_icon, pkg, plist, requires_key) 
+        VALUES 
+        (?, '测试应用', 'com.test.app', '1.0.0', '1', 10000000, 
+        'https://example.com/icon.png', 'https://example.com/web_icon.png', 
+        'https://example.com/app.ipa', 'https://example.com/app.plist', 1)`,
+        [id]
+      );
+      
+      console.log('测试应用创建成功，ID:', id);
+      return id;
+    } catch (error) {
+      console.error('创建测试应用错误:', error);
       throw error;
     }
   }

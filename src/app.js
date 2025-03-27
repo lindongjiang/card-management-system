@@ -7,6 +7,9 @@ const appRoutes = require('./routes/appRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 const userRoutes = require('./routes/userRoutes');
 const authRoutes = require('./routes/authRoutes');
+const clientRoutes = require('./routes/clientRoutes');
+const appModel = require('./models/appModel');
+const cardModel = require('./models/cardModel');
 
 // 初始化应用
 const app = express();
@@ -33,6 +36,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/apps', appRoutes);
 app.use('/api/cards', cardRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/client', clientRoutes);
 
 // 主页
 app.get('/', (req, res) => {
@@ -60,6 +64,24 @@ app.use((err, req, res, next) => {
     message: '服务器内部错误'
   });
 });
+
+// 创建一个测试需要卡密的应用
+async function createTestApp() {
+  try {
+    const testAppId = await appModel.insertTestApp();
+    console.log('测试应用创建成功, ID:', testAppId);
+    
+    // 创建测试卡密
+    const testCard = await cardModel.createTestCard();
+    console.log('测试卡密创建成功:', testCard);
+    
+  } catch (error) {
+    console.error('创建测试数据失败:', error);
+  }
+}
+
+// 调用创建测试应用函数
+createTestApp();
 
 // 强制使用6677端口
 const PORT = 6677;

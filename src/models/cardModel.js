@@ -113,7 +113,7 @@ class CardModel {
           [card.id]
         );
         
-        // 创建UDID绑定 - 不再绑定特定应用
+        // 创建UDID绑定 - 不再需要app_id
         await connection.execute(
           'INSERT INTO bindings (udid, card_id) VALUES (?, ?)',
           [udid, card.id]
@@ -386,6 +386,23 @@ class CardModel {
       }
     } catch (error) {
       console.error('删除绑定错误:', error);
+      throw error;
+    }
+  }
+
+  // 创建测试卡密（仅用于API测试）
+  async createTestCard() {
+    try {
+      const testCard = 'TEST' + Date.now();
+      const [result] = await pool.execute(
+        'INSERT INTO cards (card_key, used, created_at) VALUES (?, 0, NOW())',
+        [testCard]
+      );
+      
+      console.log('测试卡密创建成功:', testCard);
+      return testCard;
+    } catch (error) {
+      console.error('创建测试卡密错误:', error);
       throw error;
     }
   }

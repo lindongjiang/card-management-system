@@ -192,6 +192,17 @@ class CardService {
       };
     }
   }
+
+  // 检查UDID绑定状态
+  async checkBinding(udid) {
+    try {
+      const isBindingExist = await cardModel.checkBinding(udid);
+      return isBindingExist;
+    } catch (error) {
+      console.error('检查UDID绑定服务错误:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new CardService();

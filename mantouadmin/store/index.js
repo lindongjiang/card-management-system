@@ -146,6 +146,22 @@ export default createStore({
       }
     },
     
+    // 删除应用
+    async deleteApp({ commit, dispatch }, appId) {
+      try {
+        commit('SET_LOADING', true);
+        const result = await api.app.deleteApp(appId);
+        if (result.success) {
+          await dispatch('fetchAppList');
+        }
+        return result;
+      } catch (error) {
+        throw error;
+      } finally {
+        commit('SET_LOADING', false);
+      }
+    },
+    
     // 获取卡密列表
     async fetchCardList({ commit }) {
       try {
