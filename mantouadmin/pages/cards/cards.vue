@@ -6,6 +6,7 @@
 				<input type="text" v-model="searchKeyword" placeholder="搜索卡密或UDID" />
 			</view>
 			<button class="btn generate-btn" @click="goToGenerateCards">生成卡密</button>
+			<button class="btn export-btn" @click="exportValidCards">导出</button>
 			<button class="btn bind-btn" @click="showBindingModal">绑定</button>
 		</view>
 		
@@ -113,6 +114,11 @@
 					(card.card_key && card.card_key.toLowerCase().includes(keyword)) ||
 					(card.udid && card.udid.toLowerCase().includes(keyword))
 				);
+			},
+			
+			// 有效卡密列表
+			validCards() {
+				return this.cardList.filter(card => !card.used);
 			}
 		},
 		onLoad() {
@@ -146,6 +152,70 @@
 					uni.$toast('加载卡密数据失败');
 					console.error('加载卡密数据错误:', error);
 				}
+			},
+			
+			// 导出有效卡密
+			exportValidCards() {
+				if (this.validCards.length === 0) {
+					uni.$toast('没有可用的卡密可导出');
+					return;
+				}
+				
+				// 显示导出格式选择弹窗
+				uni.showActionSheet({
+					itemList: ['原始格式', '使用逗号分隔 (,)', '使用空格分隔', '使用短横线分隔 (----)'],
+					success: (res) => {
+						let separator = '';
+						switch(res.tapIndex) {
+							case 0: // 原始格式，不添加分隔符
+								this.doExportCards('');
+								break;
+							case 1: // 使用逗号分隔
+								this.doExportCards(',');
+								break;
+							case 2: // 使用空格分隔
+								this.doExportCards(' ');
+								break;
+							case 3: // 使用短横线分隔
+								this.doExportCards('----');
+								break;
+						}
+					}
+				});
+			},
+			
+			// 实际执行导出操作
+			doExportCards(separator) {
+				let cardKeysText = '';
+				
+				if (separator) {
+					// 如果卡密中包含分隔用字符，我们假设可以将卡密的前一半作为卡号，后一半作为密码
+					cardKeysText = this.validCards.map(card => {
+						const key = card.card_key;
+						if (key.length > 2) {
+							const midPoint = Math.floor(key.length / 2);
+							const cardNumber = key.substring(0, midPoint);
+							const cardPassword = key.substring(midPoint);
+							return cardNumber + separator + cardPassword;
+						}
+						return key; // 如果卡密太短，则保持原样
+					}).join('\n');
+				} else {
+					// 原始格式，直接导出卡密
+					cardKeysText = this.validCards.map(card => card.card_key).join('\n');
+				}
+				
+				// 复制到剪贴板并通知用户
+				uni.setClipboardData({
+					data: cardKeysText,
+					success: () => {
+						uni.showModal({
+							title: '导出成功',
+							content: `已将 ${this.validCards.length} 个有效卡密复制到剪贴板`,
+							showCancel: false
+						});
+					}
+				});
 			},
 			
 			// 前往生成卡密页面
@@ -284,8 +354,12 @@
 		margin-left: 10rpx;
 	}
 	
-	.generate-btn, .bind-btn {
+	.generate-btn, .bind-btn, .export-btn {
 		white-space: nowrap;
+	}
+	
+	.export-btn {
+		background-color: #34C759;
 	}
 	
 	.stats-section {

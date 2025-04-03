@@ -5,18 +5,11 @@ class CardModel {
   // 生成单个卡密
   async generateCard(validity = 30) {
     const cardKey = nanoid(16);
-    let expiresAt = null;
-    
-    // 如果有效期大于0，计算过期时间
-    if (validity > 0) {
-      expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + validity);
-    }
     
     try {
       const [result] = await pool.execute(
-        'INSERT INTO cards (card_key, expires_at) VALUES (?, ?)',
-        [cardKey, expiresAt]
+        'INSERT INTO cards (card_key) VALUES (?)',
+        [cardKey]
       );
       return { id: result.insertId, cardKey };
     } catch (error) {
@@ -85,11 +78,6 @@ class CardModel {
       }
       
       const card = cards[0];
-      
-      // 检查卡密是否过期
-      if (card.expires_at && new Date(card.expires_at) < new Date()) {
-        return { success: false, message: '卡密已过期' };
-      }
       
       // 检查UDID是否已有绑定记录 - 不再检查特定应用
       const [bindings] = await pool.execute(

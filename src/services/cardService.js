@@ -3,9 +3,9 @@ const appModel = require('../models/appModel');
 
 class CardService {
   // 生成卡密
-  async generateCards(count = 1, validity = 30) {
+  async generateCards(count = 1) {
     try {
-      const cards = await cardModel.batchGenerateCards(count, validity);
+      const cards = await cardModel.batchGenerateCards(count);
       return { 
         success: true, 
         data: cards,

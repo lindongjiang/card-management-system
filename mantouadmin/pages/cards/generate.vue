@@ -85,7 +85,7 @@
 			
 			async fetchAppList() {
 				try {
-					await this.fetchAppList();
+					await this.$store.dispatch('fetchAppList');
 				} catch (error) {
 					uni.$toast('加载应用列表失败');
 					console.error('加载应用列表错误:', error);
@@ -97,22 +97,20 @@
 					return uni.$toast('请输入有效的卡密数量');
 				}
 				
-				if (!this.validity || this.validity <= 0) {
-					return uni.$toast('请输入有效的卡密有效期');
-				}
-				
 				try {
-					const result = await this.generateCards({
-						count: parseInt(this.count),
-						validity: parseInt(this.validity)
-						// 不再传递appId参数
-					});
+					const params = {
+						count: parseInt(this.count)
+					};
 					
-					if (result.success) {
+					console.log('生成卡密参数:', params);
+					
+					const result = await this.generateCards(params);
+					
+					if (result && result.success) {
 						this.generatedCards = result.data;
 						uni.$toast(`成功生成${this.generatedCards.length}张卡密`);
 					} else {
-						uni.$toast(result.message || '生成卡密失败');
+						uni.$toast(result?.message || '生成卡密失败');
 					}
 				} catch (error) {
 					uni.$toast('生成卡密出错');

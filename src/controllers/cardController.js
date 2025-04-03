@@ -32,7 +32,7 @@ class CardController {
   // 生成卡密
   async generateCards(req, res) {
     try {
-      const { count, validity } = req.body;
+      const { count } = req.body;
       
       if (!count || count <= 0) {
         return res.status(400).json({
@@ -41,7 +41,7 @@ class CardController {
         });
       }
       
-      const result = await cardService.generateCards(count, validity);
+      const result = await cardService.generateCards(count);
       
       if (result.success) {
         res.json({
