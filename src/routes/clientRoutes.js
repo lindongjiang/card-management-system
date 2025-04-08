@@ -4,7 +4,7 @@ const clientController = require('../controllers/clientController');
 const router = express.Router();
 
 // 获取应用列表（不含plist和pkg字段）
-router.get('/apps', clientController.getApps);
+router.get('/apps', clientController.getAppList);
 
 // 获取应用详情（需要UDID验证权限）
 router.get('/apps/:id', clientController.getAppDetail);
