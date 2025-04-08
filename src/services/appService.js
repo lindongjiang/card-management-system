@@ -1,5 +1,6 @@
 const axios = require('axios');
 const appModel = require('../models/appModel');
+const encryptionService = require('./encryptionService');
 
 class AppService {
   // 从外部API同步应用数据
@@ -49,13 +50,16 @@ class AppService {
     try {
       const apps = await appModel.getAllApps();
       
-      // 处理返回结果，隐藏无权访问的plist
+      // 处理返回结果，加密敏感信息
       return apps.map(app => {
         const result = { ...app };
         
         // 如果需要卡密，则隐藏plist
         if (app.requires_key) {
           result.plist = null;
+        } else if (app.plist) {
+          // 加密plist链接
+          result.plist = encryptionService.generateEncryptedPlistUrl(app.plist);
         }
         
         return result;
@@ -78,6 +82,9 @@ class AppService {
       // 如果需要卡密，隐藏plist
       if (app.requires_key) {
         app.plist = null;
+      } else if (app.plist) {
+        // 加密plist链接
+        app.plist = encryptionService.generateEncryptedPlistUrl(app.plist);
       }
       
       return app;

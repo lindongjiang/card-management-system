@@ -1,15 +1,16 @@
 const appService = require('../services/appService');
 const cardService = require('../services/cardService');
 const clientService = require('../services/clientService');
+const encryptionService = require('../services/encryptionService');
 
 class ClientController {
-  // 获取应用列表（不含敏感字段）
-  async getApps(req, res) {
+  // 获取应用列表
+  async getAppList(req, res) {
     try {
-      const apps = await clientService.getPublicApps();
+      const result = await clientService.getAppList();
       res.json({
         success: true,
-        data: apps
+        data: result
       });
     } catch (error) {
       console.error('获取应用列表错误:', error);
@@ -20,7 +21,7 @@ class ClientController {
     }
   }
 
-  // 获取应用详情（含敏感字段，需验证权限）
+  // 获取应用详情
   async getAppDetail(req, res) {
     try {
       const { id } = req.params;
@@ -39,7 +40,8 @@ class ClientController {
         return res.json({
           success: true,
           data: {
-            ...result.app,
+            iv: result.iv,
+            data: result.data,
             requiresUnlock: true,
             isUnlocked: false
           },
@@ -49,7 +51,12 @@ class ClientController {
       
       res.json({
         success: true,
-        data: result.app
+        data: {
+          iv: result.iv,
+          data: result.data,
+          requiresUnlock: result.requiresUnlock,
+          isUnlocked: result.isUnlocked
+        }
       });
     } catch (error) {
       console.error('获取应用详情错误:', error);
