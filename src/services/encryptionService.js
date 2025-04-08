@@ -3,7 +3,8 @@ const crypto = require('crypto');
 class EncryptionService {
   constructor() {
     this.algorithm = 'aes-256-cbc';
-    this.key = Buffer.from(process.env.ENCRYPTION_KEY, 'utf8');
+    // 将十六进制字符串转换为Buffer
+    this.key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
     
     // 验证密钥长度
     if (this.key.length !== 32) {
