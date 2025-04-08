@@ -1,3 +1,6 @@
+// 加载环境变量
+require('dotenv').config();
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -14,8 +17,8 @@ const plistRoutes = require('./routes/plistRoutes');
 const appModel = require('./models/appModel');
 const cardModel = require('./models/cardModel');
 
-// 强制使用6677端口
-const PORT = 6677;
+// 使用环境变量中的端口
+const PORT = process.env.PORT || 6677;
 
 // 初始化应用
 const app = express();

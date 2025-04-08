@@ -3,7 +3,12 @@ const crypto = require('crypto');
 class EncryptionService {
   constructor() {
     this.algorithm = 'aes-256-cbc';
-    this.key = Buffer.from(process.env.ENCRYPTION_KEY || 'your-32-byte-encryption-key-here', 'utf8');
+    this.key = Buffer.from(process.env.ENCRYPTION_KEY, 'utf8');
+    
+    // 验证密钥长度
+    if (this.key.length !== 32) {
+      throw new Error('加密密钥必须是32字节长度');
+    }
   }
 
   // 生成随机IV
