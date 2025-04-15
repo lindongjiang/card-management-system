@@ -12,10 +12,11 @@ const router = express.Router();
 // 生成应用安装HTML页面 - 更具体的路由放在前面
 router.get('/install-page/:appId', async (req, res) => {
   try {
-    console.log(`[${new Date().toISOString()}] 请求安装页面 - AppID: ${req.params.appId}, UDID: ${req.query.udid || '未提供'}`);
+    const clientIP = req.ip || req.connection.remoteAddress || '未知IP';
+    console.log(`[${new Date().toISOString()}] 请求安装页面 - AppID: ${req.params.appId}, UDID: ${req.query.udid || '未提供'}, IP: ${clientIP}`);
     
     const { appId } = req.params;
-    const { udid, token } = req.query;
+    const { udid, token, device_info } = req.query;
     
     if (!appId || !udid) {
       console.error(`安装页面错误: 缺少必要参数 - AppID: ${appId || '未提供'}, UDID: ${udid || '未提供'}`);
@@ -25,21 +26,80 @@ router.get('/install-page/:appId', async (req, res) => {
       });
     }
     
-    // 验证token（如果提供了token）
-    if (token) {
-      const verifyResult = encryptionService.verifySecurityToken(token, appId, udid);
-      if (!verifyResult.valid) {
-        console.error(`安装页面错误: Token验证失败 - AppID: ${appId}, UDID: ${udid}, 原因: ${verifyResult.reason}`);
-        return res.status(403).json({
-          success: false,
-          message: `安装链接无效或已过期: ${verifyResult.reason}`
-        });
-      }
-      console.log(`Token验证成功 - AppID: ${appId}, UDID: ${udid}, 过期时间: ${new Date(verifyResult.expiryTime).toISOString()}`);
-    } else {
-      // 如果没有提供token，记录一下但继续处理（为了向后兼容）
-      console.log(`注意: 没有提供安全token - AppID: ${appId}, UDID: ${udid}, IP: ${req.ip}`);
+    // 强制要求token验证
+    if (!token) {
+      console.error(`安装页面错误: 缺少安全令牌 - AppID: ${appId}, UDID: ${udid}, IP: ${clientIP}`);
+      return res.status(403).send(`
+        <html><body>
+          <h2>安全错误</h2>
+          <p>此链接无效或缺少必要参数，请从AppFlex应用内重新获取安装链接。</p>
+          <a href="javascript:window.close()">关闭</a>
+        </body></html>
+      `);
     }
+    
+    // 验证token - 先尝试增强型token
+    let verifyResult;
+    
+    // 检查是否是增强型token
+    if (token.split('_').length >= 5) {
+      verifyResult = encryptionService.verifyEnhancedToken(token, appId, udid, clientIP);
+      
+      // 如果验证失败但不是因为格式问题，直接返回错误
+      if (!verifyResult.valid && verifyResult.reason !== '无效的token格式') {
+        console.error(`安装页面错误: 增强型Token验证失败 - AppID: ${appId}, UDID: ${udid}, IP: ${clientIP}, 原因: ${verifyResult.reason}`);
+        return res.status(403).send(`
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>链接已失效</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background-color: #f9f9f9; text-align: center; }
+              .container { width: 90%; max-width: 600px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+              h2 { color: #e74c3c; margin-bottom: 20px; }
+              p { color: #666; line-height: 1.6; }
+              .error-details { margin: 20px 0; padding: 15px; background-color: #fdf0ed; border-radius: 8px; text-align: left; }
+              .back-button { display: inline-block; background-color: #3498db; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 15px; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h2>链接已失效</h2>
+              <p>此安装链接无法使用，可能是由于以下原因：</p>
+              
+              <div class="error-details">
+                <p>${verifyResult.reason}</p>
+                <p>当前IP: ${clientIP.substring(0, 10)}***</p>
+              </div>
+              
+              <p>请返回AppFlex应用，重新获取安装链接。</p>
+              <a href="javascript:window.close();" class="back-button">关闭</a>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+    }
+    
+    // 如果增强型token验证失败或不是增强型token，尝试验证标准token（向后兼容）
+    if (!verifyResult || !verifyResult.valid) {
+      verifyResult = encryptionService.verifySecurityToken(token, appId, udid);
+      if (!verifyResult.valid) {
+        console.error(`安装页面错误: 标准Token验证失败 - AppID: ${appId}, UDID: ${udid}, 原因: ${verifyResult.reason}`);
+        return res.status(403).send(`
+          <html><body>
+            <h2>链接已失效</h2>
+            <p>安装链接已过期或无效。</p>
+            <p>请从AppFlex应用内重新获取安装链接。</p>
+            <a href="javascript:window.close()">关闭</a>
+          </body></html>
+        `);
+      }
+    }
+    
+    const tokenType = verifyResult.deviceInfo ? '增强型' : '标准';
+    console.log(`Token验证成功(${tokenType}) - AppID: ${appId}, UDID: ${udid}, IP: ${clientIP}`);
     
     // 获取应用详情
     let app;
@@ -145,7 +205,8 @@ router.get('/install-page/:appId', async (req, res) => {
     try {
       if (!plistUrl.includes('/api/plist/')) {
         console.log(`处理原始plist链接 - AppID: ${appId}, 原始链接: ${plistUrl}`);
-        plistUrl = encryptionService.generateEncryptedPlistUrl(plistUrl);
+        // 将UDID和IP绑定到plist链接
+        plistUrl = encryptionService.generateEncryptedPlistUrl(plistUrl, udid, clientIP);
         console.log(`处理后的plist链接 - AppID: ${appId}, 处理后链接: ${plistUrl}`);
       }
     } catch (error) {
