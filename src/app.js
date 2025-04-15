@@ -78,6 +78,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/plist', plistRoutes);
 app.use('/api/app-details', appDetailRoutes);
+app.use('/api/stats', appDetailRoutes);
 
 // 添加路由错误日志
 app.use((req, res, next) => {

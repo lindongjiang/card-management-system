@@ -18,6 +18,10 @@ const confirmationCodeExpiry = 10 * 60 * 1000; // 10分钟过期
 const usedPlistUrls = new Map();
 const plistUrlExpiry = 15 * 60 * 1000; // plist链接有效期15分钟
 
+// 存储临时安全令牌
+const tempSecurityTokens = new Map();
+const tempTokenExpiry = 2 * 60 * 1000; // 临时令牌有效期2分钟
+
 // 生成一次性确认码
 function generateConfirmationCode() {
   const min = 100000; // 最小6位数
@@ -52,6 +56,13 @@ setInterval(() => {
   for (const [plistUrl, plistData] of usedPlistUrls.entries()) {
     if (now - plistData.timestamp > plistUrlExpiry) {
       usedPlistUrls.delete(plistUrl);
+    }
+  }
+  
+  // 清理临时安全令牌
+  for (const [tokenKey, tokenData] of tempSecurityTokens.entries()) {
+    if (now - tokenData.timestamp > tempTokenExpiry) {
+      tempSecurityTokens.delete(tokenKey);
     }
   }
 }, 60 * 1000); // 每分钟清理一次
@@ -526,8 +537,106 @@ class EncryptionService {
     }
   }
   
+  // 生成临时安全令牌 - 用于HTML页面和plist链接之间的安全验证
+  generateTempSecurityToken(iv, encryptedData, clientIP) {
+    const timestamp = Date.now();
+    const random = crypto.randomBytes(8).toString('hex');
+    
+    // 创建令牌内容
+    const tokenData = `${iv}_${timestamp}_${random}`;
+    
+    // 使用HMAC签名
+    const signature = crypto
+      .createHmac('sha256', this.key)
+      .update(tokenData)
+      .digest('hex');
+    
+    const token = `${timestamp}_${signature}_${random}`;
+    
+    // 存储令牌信息
+    const tokenKey = `${iv}_${encryptedData}`;
+    tempSecurityTokens.set(tokenKey, {
+      token: token,
+      timestamp: timestamp,
+      clientIP: clientIP,
+      used: false
+    });
+    
+    console.log(`生成临时安全令牌 - IV: ${iv.substring(0, 8)}..., 令牌: ${token.substring(0, 15)}...`);
+    
+    return {
+      token: token,
+      expiryTime: timestamp + tempTokenExpiry
+    };
+  }
+  
+  // 验证临时安全令牌
+  verifyTempSecurityToken(token, iv, encryptedData, clientIP) {
+    try {
+      // 解析令牌
+      const parts = token.split('_');
+      if (parts.length !== 3) {
+        console.error(`无效的临时令牌格式: ${token}`);
+        return false;
+      }
+      
+      const [timestamp, signature, random] = parts;
+      const now = Date.now();
+      
+      // 验证是否过期
+      if (now - parseInt(timestamp) > tempTokenExpiry) {
+        console.error(`临时令牌已过期: ${token}`);
+        return false;
+      }
+      
+      // 获取存储的令牌信息
+      const tokenKey = `${iv}_${encryptedData}`;
+      if (!tempSecurityTokens.has(tokenKey)) {
+        console.error(`未找到匹配的临时令牌记录: ${tokenKey}`);
+        return false;
+      }
+      
+      const tokenData = tempSecurityTokens.get(tokenKey);
+      
+      // 验证令牌是否匹配
+      if (tokenData.token !== token) {
+        console.error(`临时令牌不匹配: 预期=${tokenData.token.substring(0, 15)}..., 实际=${token.substring(0, 15)}...`);
+        return false;
+      }
+      
+      // 验证令牌是否已使用
+      if (tokenData.used) {
+        console.error(`临时令牌已被使用: ${token.substring(0, 15)}...`);
+        return false;
+      }
+      
+      // 验证签名
+      const tokenContent = `${iv}_${timestamp}_${random}`;
+      const expectedSignature = crypto
+        .createHmac('sha256', this.key)
+        .update(tokenContent)
+        .digest('hex');
+      
+      if (signature !== expectedSignature) {
+        console.error(`临时令牌签名无效: 预期=${expectedSignature.substring(0, 15)}..., 实际=${signature.substring(0, 15)}...`);
+        return false;
+      }
+      
+      // 标记令牌为已使用
+      tokenData.used = true;
+      tokenData.useTime = now;
+      tempSecurityTokens.set(tokenKey, tokenData);
+      
+      console.log(`临时安全令牌验证成功 - IV: ${iv.substring(0, 8)}..., 令牌: ${token.substring(0, 15)}...`);
+      return true;
+    } catch (error) {
+      console.error(`验证临时安全令牌失败:`, error);
+      return false;
+    }
+  }
+
   // 解密并验证plist URL
-  decryptAndVerifyPlistUrl(iv, encryptedData, requestUdid = null, requestIP = null, htmlPageToken = null) {
+  decryptAndVerifyPlistUrl(iv, encryptedData, requestUdid = null, requestIP = null, htmlPageToken = null, skipTokenCheck = false) {
     try {
       const decrypted = this.decrypt(encryptedData, iv);
       const parts = decrypted.split('|');
@@ -558,22 +667,24 @@ class EncryptionService {
       // 验证安全令牌 - 确保此链接是通过HTML页面访问的
       // 如果提供了htmlPageToken参数，验证它是否与安全令牌匹配
       // 如果没有提供htmlPageToken，将返回令牌供页面使用
-      if (htmlPageToken) {
-        // 用于HTML页面的链接验证
-        if (htmlPageToken !== securityToken) {
-          console.log(`[加密服务] 安全令牌不匹配 - 预期: ${securityToken.substring(0, 15)}..., 实际: ${htmlPageToken.substring(0, 15)}...`);
-          return { valid: false, reason: '安全验证失败，链接可能被篡改' };
+      if (!skipTokenCheck) {
+        if (htmlPageToken) {
+          // 用于HTML页面的链接验证
+          if (htmlPageToken !== securityToken) {
+            console.log(`[加密服务] 安全令牌不匹配 - 预期: ${securityToken.substring(0, 15)}..., 实际: ${htmlPageToken.substring(0, 15)}...`);
+            return { valid: false, reason: '安全验证失败，链接可能被篡改' };
+          }
+        } else {
+          // 如果没有提供htmlPageToken，返回令牌供HTML页面使用
+          // 但不允许直接使用plist
+          console.log(`[加密服务] 无安全令牌提供，返回令牌供HTML页面使用`);
+          return { 
+            valid: true, 
+            requiresHtmlAuth: true,
+            securityToken: securityToken,
+            expiryTime: expiryTime
+          };
         }
-      } else {
-        // 如果没有提供htmlPageToken，返回令牌供HTML页面使用
-        // 但不允许直接使用plist
-        console.log(`[加密服务] 无安全令牌提供，返回令牌供HTML页面使用`);
-        return { 
-          valid: true, 
-          requiresHtmlAuth: true,
-          securityToken: securityToken,
-          expiryTime: expiryTime
-        };
       }
       
       // 如果包含UDID，验证是否匹配

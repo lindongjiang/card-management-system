@@ -331,6 +331,22 @@ router.get('/install-page/:appId', async (req, res) => {
     const encryptedStatsUrl = encryptionService.generateEncryptedStatsUrl(appId, udid, clientIP);
     console.log(`生成加密统计链接 - AppID: ${appId}, 链接: ${encryptedStatsUrl}`);
     
+    // 生成plist安全令牌 - 用于绑定到当前HTML页面
+    const plistSecurityToken = crypto
+      .createHmac('sha256', process.env.JWT_SECRET || 'appflex-secure-token')
+      .update(`${plistUrl}_${udid}_${Date.now()}`)
+      .digest('hex');
+    
+    // 构建带安全令牌的plist URL
+    const securedPlistUrl = fullPlistUrl.includes('?') 
+      ? `${fullPlistUrl}&security_token=${plistSecurityToken}&udid=${udid}` 
+      : `${fullPlistUrl}?security_token=${plistSecurityToken}&udid=${udid}`;
+    
+    // 更新安装URL，包含安全令牌
+    const securedInstallUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(securedPlistUrl)}`;
+    
+    console.log(`生成带安全验证的安装链接 - AppID: ${appId}, 安全令牌: ${plistSecurityToken.substring(0, 15)}...`);
+    
     // 生成HTML安装页面时，添加诊断信息（总是在非生产环境下显示或调试模式下）
     let diagnosticInfo = '';
     if (debugMode || process.env.NODE_ENV !== 'production') {
@@ -374,7 +390,7 @@ router.get('/install-page/:appId', async (req, res) => {
           
           <p>您的设备已获授权安装此应用</p>
           
-          <a href="${installUrl}" class="install-button">点击安装</a>
+          <a href="${securedInstallUrl}" class="install-button">点击安装</a>
           
           <div class="instructions">
             <h3>安装说明:</h3>
