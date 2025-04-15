@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const querystring = require('querystring');
 const url = require('url');
+const path = require('path');
+const fs = require('fs');
 
 // 存储已使用的令牌
 const usedTokens = new Map();
@@ -8,27 +10,48 @@ const tokenExpiryTime = 15 * 60 * 1000; // 令牌有效期15分钟
 // 限制每个设备对每个令牌的最大使用次数
 const MAX_TOKEN_USES_PER_DEVICE = 2; // 降低为2次，加强安全性
 
-// IP字符串转换为可读格式
-function formatIP(ip) {
-  // 处理IPv6格式的本地IP
-  if (ip.includes('::ffff:')) {
-    return ip.replace('::ffff:', '');
-  }
-  return ip;
+// 存储一次性确认码
+const confirmationCodes = new Map();
+const confirmationCodeExpiry = 10 * 60 * 1000; // 10分钟过期
+
+// 生成一次性确认码
+function generateConfirmationCode() {
+  const min = 100000; // 最小6位数
+  const max = 999999; // 最大6位数
+  return Math.floor(min + Math.random() * (max - min + 1)).toString();
 }
 
-// 定期清理过期令牌
+// IP字符串转换为可读格式
+function formatIP(ip) {
+  if (!ip) return 'unknown';
+  return ip.replace(/^.*:/, ''); // 去除IPv6前缀，如果有的话
+}
+
+// 定期清理过期令牌和确认码
 setInterval(() => {
   const now = Date.now();
+  // 清理过期令牌
   for (const [token, tokenData] of usedTokens.entries()) {
     if (now - tokenData.timestamp > tokenExpiryTime) {
       usedTokens.delete(token);
+    }
+  }
+  
+  // 清理过期确认码
+  for (const [code, codeData] of confirmationCodes.entries()) {
+    if (now - codeData.timestamp > confirmationCodeExpiry) {
+      confirmationCodes.delete(code);
     }
   }
 }, 60 * 1000); // 每分钟清理一次
 
 // 与iOS端相同的密钥
 const SERVER_SECRET = '6B3F9A1C7D4E2B5A8F1E0D3C6B9A2E5D';
+const iv = Buffer.alloc(16, 0); // 固定IV用于加密，生产环境请随机生成
+const lenientMode = process.env.LENIENT_MODE === 'true' || false; // 宽松模式配置
+
+// 配置token使用限制
+const TOKEN_EXPIRY = 24 * 60 * 60 * 1000; // 24小时过期
 
 class EncryptionService {
   constructor() {
@@ -194,11 +217,84 @@ class EncryptionService {
     };
   }
   
-  // 验证安全token（使用新的密钥和方法验证）
-  verifySecurityToken(token, appId, udid, clientIP) {
+  // 创建设备转移确认码 - 用于允许用户在其他设备上使用安装链接
+  createDeviceTransferCode(token, originalUdid) {
+    // 生成6位确认码
+    const code = generateConfirmationCode();
+    const now = Date.now();
+    
+    // 存储确认码及相关信息
+    confirmationCodes.set(code, {
+      timestamp: now,
+      token: token,
+      originalUdid: originalUdid,
+      used: false
+    });
+    
+    console.log(`为令牌创建设备转移码 - 令牌: ${token.substring(0, 15)}..., 原UDID: ${originalUdid.substring(0, 8)}..., 确认码: ${code}`);
+    
+    return {
+      code: code,
+      expiryTime: now + confirmationCodeExpiry
+    };
+  }
+  
+  // 验证设备转移确认码
+  verifyDeviceTransferCode(code, token, newUdid) {
+    if (!confirmationCodes.has(code)) {
+      return {
+        valid: false,
+        reason: '确认码无效或已过期'
+      };
+    }
+    
+    const codeData = confirmationCodes.get(code);
+    
+    // 检查确认码是否已使用
+    if (codeData.used) {
+      return {
+        valid: false,
+        reason: '确认码已被使用'
+      };
+    }
+    
+    // 检查令牌是否匹配
+    if (codeData.token !== token) {
+      return {
+        valid: false,
+        reason: '确认码与安装链接不匹配'
+      };
+    }
+    
+    // 检查是否过期
+    const now = Date.now();
+    if (now - codeData.timestamp > confirmationCodeExpiry) {
+      confirmationCodes.delete(code); // 清理过期确认码
+      return {
+        valid: false,
+        reason: '确认码已过期'
+      };
+    }
+    
+    // 标记确认码为已使用
+    codeData.used = true;
+    codeData.newUdid = newUdid;
+    codeData.useTime = now;
+    confirmationCodes.set(code, codeData);
+    
+    console.log(`设备转移确认成功 - 确认码: ${code}, 原UDID: ${codeData.originalUdid.substring(0, 8)}..., 新UDID: ${newUdid.substring(0, 8)}...`);
+    
+    return {
+      valid: true,
+      originalUdid: codeData.originalUdid
+    };
+  }
+  
+  // 修改标准Token验证方法，添加确认码支持
+  verifySecurityToken(token, appId, udid, clientIP, confirmCode = null) {
     try {
       const formattedIP = formatIP(clientIP || 'unknown');
-      console.log(`验证标准令牌: ${token}, AppID: ${appId}, UDID: ${udid.substring(0, 8)}..., IP: ${formattedIP}`);
+      console.log(`验证标准令牌: ${token}, AppID: ${appId}, UDID: ${udid.substring(0, 8)}..., IP: ${formattedIP}, 确认码: ${confirmCode || '无'}`);
       
       // 解析token
       const parts = token.split('_');
@@ -219,7 +315,7 @@ class EncryptionService {
       // 检查令牌使用情况 - 与增强型令牌使用相同逻辑
       const tokenKey = `standard_${token}`;
       
-      // 强制设备绑定检查
+      // 强制设备绑定检查 - 除非提供有效的确认码
       if (usedTokens.has(tokenKey)) {
         const tokenData = usedTokens.get(tokenKey);
         
@@ -230,11 +326,51 @@ class EncryptionService {
         // 检查是否为同一设备 - 检查UDID是否匹配
         const isSameDevice = tokenData.udid === udid;
         
+        // 如果不是同一设备，验证是否提供了确认码
         if (!isSameDevice) {
+          // 如果提供了确认码，验证其有效性
+          if (confirmCode) {
+            const verifyResult = this.verifyDeviceTransferCode(confirmCode, token, udid);
+            if (verifyResult.valid) {
+              console.log(`通过确认码验证设备转移 - Token: ${token.substring(0, 15)}..., 从UDID: ${tokenData.udid.substring(0, 8)}..., 到UDID: ${udid.substring(0, 8)}...`);
+              
+              // 如果确认码有效，允许在新设备上使用
+              // 但仍然检查使用次数限制
+              if (tokenData.useCount >= MAX_TOKEN_USES_PER_DEVICE) {
+                return { 
+                  valid: false, 
+                  reason: `安装链接已达到最大使用次数(${MAX_TOKEN_USES_PER_DEVICE}次)，请从AppFlex应用内重新获取安装链接` 
+                };
+              }
+              
+              // 更新token使用记录，添加新设备信息
+              tokenData.useCount += 1;
+              tokenData.lastUsed = now;
+              tokenData.transferredTo = udid;
+              tokenData.transferTime = now;
+              if (formattedIP && formattedIP !== 'unknown') {
+                tokenData.ipHistory.push(formattedIP);
+              }
+              usedTokens.set(tokenKey, tokenData);
+              
+              return { valid: true, expiryTime: parseInt(expiryTime), isTransferred: true };
+            } else {
+              // 确认码无效
+              return { 
+                valid: false, 
+                reason: verifyResult.reason || '确认码验证失败'
+              };
+            }
+          }
+          
+          // 无确认码时拒绝使用
           console.log(`令牌被其他设备使用 - Token: ${token.substring(0, 15)}..., 记录UDID: ${tokenData.udid.substring(0, 8)}..., 当前UDID: ${udid.substring(0, 8)}...`);
+          
+          // 返回带有可以通过确认码验证的提示
           return { 
             valid: false, 
-            reason: '此安装链接已绑定到其他设备，出于安全考虑，请在原设备上使用或获取新的安装链接' 
+            reason: '此安装链接已绑定到其他设备，出于安全考虑，请在原设备上使用或获取新的安装链接',
+            canUseConfirmationCode: true
           };
         }
         
