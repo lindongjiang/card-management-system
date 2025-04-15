@@ -45,15 +45,30 @@ router.get('/install-page/:appId', async (req, res) => {
     if (token.split('_').length >= 5) {
       verifyResult = encryptionService.verifyEnhancedToken(token, appId, udid, clientIP);
       
+      console.log(`增强型Token验证结果 - AppID: ${appId}, UDID: ${udid.substring(0, 8)}..., 结果: ${verifyResult.valid ? '成功' : '失败'}, 原因: ${verifyResult.reason || 'N/A'}`);
+      
       // 如果验证失败但不是因为格式问题，直接返回错误
       if (!verifyResult.valid && verifyResult.reason !== '无效的token格式') {
         console.error(`安装页面错误: 增强型Token验证失败 - AppID: ${appId}, UDID: ${udid}, IP: ${clientIP}, 原因: ${verifyResult.reason}`);
+        
+        // 如果是使用次数超限问题，提供更明确的错误信息
+        let errorMessage = verifyResult.reason;
+        let errorTitle = '链接已失效';
+        
+        if (verifyResult.reason.includes('最大使用次数')) {
+          errorTitle = '使用次数超限';
+        } else if (verifyResult.reason.includes('已过期')) {
+          errorTitle = '链接已过期';
+        } else if (verifyResult.reason.includes('网络环境')) {
+          errorTitle = '网络环境变更';
+        }
+        
         return res.status(403).send(`
           <html>
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>链接已失效</title>
+            <title>${errorTitle}</title>
             <style>
               body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background-color: #f9f9f9; text-align: center; }
               .container { width: 90%; max-width: 600px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -65,12 +80,14 @@ router.get('/install-page/:appId', async (req, res) => {
           </head>
           <body>
             <div class="container">
-              <h2>链接已失效</h2>
+              <h2>${errorTitle}</h2>
               <p>此安装链接无法使用，可能是由于以下原因：</p>
               
               <div class="error-details">
-                <p>${verifyResult.reason}</p>
+                <p>${errorMessage}</p>
+                <p>设备ID: ${udid.substring(0, 8)}***</p>
                 <p>当前IP: ${clientIP.substring(0, 10)}***</p>
+                <p>请求时间: ${new Date().toLocaleString()}</p>
               </div>
               
               <p>请返回AppFlex应用，重新获取安装链接。</p>
@@ -85,6 +102,8 @@ router.get('/install-page/:appId', async (req, res) => {
     // 如果增强型token验证失败或不是增强型token，尝试验证标准token（向后兼容）
     if (!verifyResult || !verifyResult.valid) {
       verifyResult = encryptionService.verifySecurityToken(token, appId, udid);
+      console.log(`标准Token验证结果 - AppID: ${appId}, UDID: ${udid.substring(0, 8)}..., 结果: ${verifyResult.valid ? '成功' : '失败'}, 原因: ${verifyResult.reason || 'N/A'}`);
+      
       if (!verifyResult.valid) {
         console.error(`安装页面错误: 标准Token验证失败 - AppID: ${appId}, UDID: ${udid}, 原因: ${verifyResult.reason}`);
         return res.status(403).send(`
@@ -222,9 +241,22 @@ router.get('/install-page/:appId', async (req, res) => {
     console.log(`生成安装链接 - AppID: ${appId}, plist URL: ${fullPlistUrl}`);
     console.log(`生成安装链接 - AppID: ${appId}, 安装URL: ${installUrl}`);
     
-    // 渲染HTML安装页面
-    console.log(`生成安装页面HTML - AppID: ${appId}, UDID: ${udid}`);
-    res.send(`
+    // 生成HTML安装页面时，添加诊断信息（仅在非生产环境下显示）
+    let diagnosticInfo = '';
+    if (process.env.NODE_ENV !== 'production') {
+      diagnosticInfo = `
+        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; font-size: 12px; color: #999;">
+          <p>诊断信息 (仅开发环境可见):</p>
+          <p>Token类型: ${tokenType}</p>
+          <p>IP: ${clientIP}</p>
+          <p>生成时间: ${new Date().toISOString()}</p>
+          <p>请求路径: ${req.originalUrl}</p>
+        </div>
+      `;
+    }
+    
+    // 在HTML安装页面末尾添加诊断信息
+    const htmlResponse = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -265,6 +297,7 @@ router.get('/install-page/:appId', async (req, res) => {
             <p>UDID: ${udid.substring(0, 8)}***</p>
             <p>应用ID: ${appId}</p>
             <p>© ${new Date().getFullYear()} AppFlex 安装服务</p>
+            ${diagnosticInfo}
           </div>
         </div>
         
@@ -282,9 +315,10 @@ router.get('/install-page/:appId', async (req, res) => {
         </script>
       </body>
       </html>
-    `);
+    `;
     
     console.log(`安装页面生成成功 - AppID: ${appId}, UDID: ${udid}`);
+    res.send(htmlResponse);
     
   } catch (error) {
     console.error('生成安装页面失败:', error);

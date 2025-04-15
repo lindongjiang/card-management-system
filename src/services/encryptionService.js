@@ -3,12 +3,14 @@ const crypto = require('crypto');
 // 存储已使用的令牌
 const usedTokens = new Map();
 const tokenExpiryTime = 15 * 60 * 1000; // 令牌有效期15分钟
+// 限制每个设备对每个令牌的最大使用次数
+const MAX_TOKEN_USES_PER_DEVICE = 5;
 
 // 定期清理过期令牌
 setInterval(() => {
   const now = Date.now();
-  for (const [token, timestamp] of usedTokens.entries()) {
-    if (now - timestamp > tokenExpiryTime) {
+  for (const [token, tokenData] of usedTokens.entries()) {
+    if (now - tokenData.timestamp > tokenExpiryTime) {
       usedTokens.delete(token);
     }
   }
@@ -73,14 +75,6 @@ class EncryptionService {
   // 验证增强型安全token
   verifyEnhancedToken(token, appId, udid, clientIP) {
     try {
-      // 检查令牌是否已被使用（一次性令牌）
-      if (usedTokens.has(token)) {
-        return { 
-          valid: false, 
-          reason: '此安装链接已被使用，每个链接仅可使用一次' 
-        };
-      }
-      
       // 解析token各部分
       const parts = token.split('_');
       if (parts.length < 5) {
@@ -99,13 +93,39 @@ class EncryptionService {
         return { valid: false, reason: '链接已过期' };
       }
       
-      // 验证IP地址
+      // 检查令牌使用情况
+      if (usedTokens.has(token)) {
+        const tokenData = usedTokens.get(token);
+        
+        // 如果是同一设备，且使用次数未超过限制，允许继续使用
+        if (tokenData.udid === udid) {
+          if (tokenData.useCount >= MAX_TOKEN_USES_PER_DEVICE) {
+            console.log(`令牌使用次数超限 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
+            return { 
+              valid: false, 
+              reason: `安装链接已达到最大使用次数(${MAX_TOKEN_USES_PER_DEVICE}次)，请从AppFlex应用内重新获取安装链接` 
+            };
+          }
+          
+          // 更新使用次数
+          tokenData.useCount += 1;
+          tokenData.lastUsed = now;
+          usedTokens.set(token, tokenData);
+          
+          console.log(`令牌重复使用 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
+        } else {
+          console.log(`令牌被其他设备使用 - Token: ${token.substring(0, 15)}..., 记录UDID: ${tokenData.udid.substring(0, 8)}..., 当前UDID: ${udid.substring(0, 8)}...`);
+          return { 
+            valid: false, 
+            reason: '此安装链接已绑定到其他设备' 
+          };
+        }
+      }
+      
+      // 验证IP地址 (放宽要求：仅记录不匹配但不阻止)
       if (originalIP !== clientIP) {
-        console.log(`IP不匹配: 原始IP=${originalIP}, 当前IP=${clientIP}`);
-        return { 
-          valid: false, 
-          reason: '网络环境已变更，此链接只能在生成链接的原始网络环境中使用' 
-        };
+        console.log(`IP不匹配但允许继续 - 原始IP=${originalIP}, 当前IP=${clientIP}, UDID=${udid.substring(0, 8)}...`);
+        // 不返回错误，只记录
       }
       
       // 重新生成签名进行验证
@@ -119,8 +139,16 @@ class EncryptionService {
         return { valid: false, reason: '无效的签名' };
       }
       
-      // 将令牌标记为已使用
-      usedTokens.set(token, now);
+      // 首次使用令牌，记录信息
+      if (!usedTokens.has(token)) {
+        usedTokens.set(token, {
+          timestamp: now,
+          udid: udid,
+          useCount: 1,
+          lastUsed: now,
+          originalIP: originalIP
+        });
+      }
       
       return { 
         valid: true, 
@@ -203,9 +231,7 @@ class EncryptionService {
       if (udid) {
         dataToEncrypt += `|${udid}`;
       }
-      if (clientIP) {
-        dataToEncrypt += `|${clientIP}`;
-      }
+      // 不再加入IP地址绑定，仅使用UDID
       
       const encrypted = this.encrypt(dataToEncrypt);
       
@@ -246,13 +272,7 @@ class EncryptionService {
         }
       }
       
-      // 如果包含IP，验证是否匹配
-      if (rest.length > 1 && requestIP && rest[1]) {
-        const embeddedIP = rest[1];
-        if (embeddedIP !== requestIP) {
-          return { valid: false, reason: '网络环境已变更' };
-        }
-      }
+      // 不再验证IP地址匹配
       
       return { 
         valid: true, 
