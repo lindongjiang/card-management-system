@@ -573,6 +573,21 @@ class EncryptionService {
   // 验证临时安全令牌
   verifyTempSecurityToken(token, iv, encryptedData, clientIP) {
     try {
+      // 检查是否是从HTML页面提供的原始安全令牌（而非临时令牌格式）
+      if(!token.includes('_')) {
+        console.log(`检测到非临时令牌格式: ${token.substring(0, 15)}...`);
+        
+        // 如果是原始安全令牌，比较原始安全令牌
+        const plistData = this.decryptAndVerifyPlistUrl(iv, encryptedData, null, null, null, true);
+        if (plistData.valid && plistData.securityToken === token) {
+          console.log(`原始安全令牌验证成功 - IV: ${iv.substring(0, 8)}..., 令牌: ${token.substring(0, 15)}...`);
+          return true;
+        }
+        
+        console.error(`原始安全令牌不匹配: 预期=${plistData.securityToken ? plistData.securityToken.substring(0, 15) + '...' : '无效'}, 实际=${token.substring(0, 15)}...`);
+        return false;
+      }
+      
       // 解析令牌
       const parts = token.split('_');
       if (parts.length !== 3) {

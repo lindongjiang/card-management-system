@@ -492,6 +492,44 @@ router.get('/stats/:iv/:encryptedData', async (req, res) => {
   }
 });
 
+// 直接处理IV和encryptedData参数的路由，用于匹配/api/stats/:iv/:encryptedData路径
+router.get('/:iv/:encryptedData', async (req, res) => {
+  try {
+    const { iv, encryptedData } = req.params;
+    const clientIP = req.ip || req.connection.remoteAddress || '未知IP';
+    
+    console.log(`处理加密统计请求 - IV: ${iv.substring(0, 8)}..., IP: ${clientIP}`);
+    
+    // 使用新的解密方法
+    const decryptResult = encryptionService.decryptStatsUrl(iv, encryptedData);
+    
+    if (!decryptResult.valid) {
+      console.error(`统计链接验证失败: ${decryptResult.reason}`);
+      return res.status(403).json({
+        success: false,
+        message: decryptResult.reason || '链接验证失败'
+      });
+    }
+    
+    // 从解密后的URL中提取appId和udid
+    const statsUrl = decryptResult.statsUrl;
+    const urlObj = new URL(`http://localhost${statsUrl}`);
+    const pathParts = urlObj.pathname.split('/');
+    const appId = pathParts[pathParts.length - 1];
+    const udid = urlObj.searchParams.get('udid');
+    
+    console.log(`解密统计链接成功，记录安装统计 - AppID: ${appId}, UDID: ${udid ? udid.substring(0, 8) + '...' : '未知'}`);
+    
+    // 实现安装统计逻辑
+    // TODO: 这里可以添加将统计数据保存到数据库的逻辑
+    
+    res.status(200).send('ok');
+  } catch (error) {
+    console.error('处理加密统计链接失败:', error);
+    res.status(500).send('error');
+  }
+});
+
 // 获取应用详情 (无需身份验证) - 一般路由放在后面
 router.get('/:appId', async (req, res) => {
   try {
