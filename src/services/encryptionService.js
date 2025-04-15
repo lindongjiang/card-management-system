@@ -604,6 +604,65 @@ class EncryptionService {
       return { valid: false, reason: '解密失败' };
     }
   }
+
+  // 生成加密的统计链接
+  generateEncryptedStatsUrl(appId, udid, clientIP = null) {
+    try {
+      // 创建原始统计URL
+      const statsUrl = `/api/app-details/install-stat/${appId}?udid=${udid}`;
+      
+      // 如果已经是加密格式，直接返回
+      if (statsUrl.startsWith('/api/stats/')) {
+        return statsUrl;
+      }
+      
+      const timestamp = Date.now();
+      const expiryTime = timestamp + (30 * 60 * 1000); // 30分钟过期
+      const random = Math.random().toString(36).substring(2, 15);
+      
+      // 加密数据
+      let dataToEncrypt = `${statsUrl}|${expiryTime}|${random}`;
+      
+      const encrypted = this.encrypt(dataToEncrypt);
+      
+      console.log(`[加密服务] 成功加密统计链接 - AppID: ${appId}, UDID: ${udid.substring(0, 8)}...`);
+      return `/api/stats/${encrypted.iv}/${encrypted.encryptedData}`;
+    } catch (error) {
+      console.error(`[加密服务] 加密统计链接失败:`, error);
+      // 发生错误时，返回原始URL
+      return `/api/app-details/install-stat/${appId}?udid=${udid}`; 
+    }
+  }
+  
+  // 解密统计链接
+  decryptStatsUrl(iv, encryptedData) {
+    try {
+      const decrypted = this.decrypt(encryptedData, iv);
+      const parts = decrypted.split('|');
+      
+      // 验证格式是否正确
+      if (parts.length < 2) {
+        return { valid: false, reason: '无效的统计链接格式' };
+      }
+      
+      const [statsUrl, expiryTimeStr, random] = parts;
+      const expiryTime = parseInt(expiryTimeStr);
+      const now = Date.now();
+      
+      // 验证是否过期
+      if (now > expiryTime) {
+        return { valid: false, reason: '统计链接已过期' };
+      }
+      
+      return { 
+        valid: true, 
+        statsUrl: statsUrl
+      };
+    } catch (error) {
+      console.error('[加密服务] 解密统计链接失败:', error);
+      return { valid: false, reason: '解密失败' };
+    }
+  }
 }
 
 module.exports = new EncryptionService(); 

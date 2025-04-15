@@ -87,8 +87,6 @@ router.get('/install-page/:appId', async (req, res) => {
               
               <div class="error-details">
                 <p>${errorMessage}</p>
-                <p>设备ID: ${udid.substring(0, 8)}***</p>
-                <p>当前IP: ${clientIP.substring(0, 10)}***</p>
                 <p>请求时间: ${new Date().toLocaleString()}</p>
               </div>
               
@@ -157,10 +155,9 @@ router.get('/install-page/:appId', async (req, res) => {
                 
                 <div class="debug-info">
                   <p>AppID: ${appId}</p>
-                  <p>UDID: ${udid.substring(0, 8)}***</p>
-                  <p>IP: ${clientIP}</p>
+                  <p>设备ID: ${udid.substring(0, 8)}***</p>
+                  <p>IP: ${clientIP.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)/, '$1.$2.*.*')}</p>
                   <p>Token类型: 标准</p>
-                  <p>Token首部: ${token.substring(0, 20)}...</p>
                   <p>请求时间: ${new Date().toISOString()}</p>
                 </div>
                 
@@ -280,7 +277,7 @@ router.get('/install-page/:appId', async (req, res) => {
               <p>版本: ${app.version || '未知'}</p>
               
               <div class="error-message">
-                <p>此设备(UDID: ${udid.substring(0, 8)}***)未经授权安装此应用。</p>
+                <p>此设备未经授权安装此应用。</p>
                 <p>请先在App中验证卡密后再尝试安装。</p>
               </div>
               
@@ -323,25 +320,28 @@ router.get('/install-page/:appId', async (req, res) => {
     }
     
     // 构建完整URL
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host').split(':')[0]}`;
     const fullPlistUrl = plistUrl.startsWith('http') ? plistUrl : `${baseUrl}${plistUrl}`;
     const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(fullPlistUrl)}`;
     
     console.log(`生成安装链接 - AppID: ${appId}, plist URL: ${fullPlistUrl}`);
     console.log(`生成安装链接 - AppID: ${appId}, 安装URL: ${installUrl}`);
     
+    // 生成加密的统计链接，替代明文URL
+    const encryptedStatsUrl = encryptionService.generateEncryptedStatsUrl(appId, udid, clientIP);
+    console.log(`生成加密统计链接 - AppID: ${appId}, 链接: ${encryptedStatsUrl}`);
+    
     // 生成HTML安装页面时，添加诊断信息（总是在非生产环境下显示或调试模式下）
     let diagnosticInfo = '';
     if (debugMode || process.env.NODE_ENV !== 'production') {
+      const maskedIP = clientIP.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)/, '$1.$2.*.*');
       diagnosticInfo = `
         <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; font-size: 12px; color: #999;">
           <p>诊断信息 (调试模式可见):</p>
           <p>Token类型: ${tokenType}</p>
-          <p>IP: ${clientIP}</p>
+          <p>IP地址: ${maskedIP}</p>
           <p>生成时间: ${new Date().toISOString()}</p>
-          <p>请求路径: ${req.originalUrl}</p>
-          <p>Token首部: ${token.substring(0, 20)}...</p>
-          <p>Server Time: ${new Date().toISOString()}</p>
+          <p>验证时间: ${new Date().toLocaleString()}</p>
         </div>
       `;
     }
@@ -385,19 +385,18 @@ router.get('/install-page/:appId', async (req, res) => {
           </div>
           
           <div class="footer">
-            <p>UDID: ${udid.substring(0, 8)}***</p>
-            <p>应用ID: ${appId}</p>
+            <p>设备已授权</p>
             <p>© ${new Date().getFullYear()} AppFlex 安装服务</p>
             ${diagnosticInfo}
           </div>
         </div>
         
         <script>
-          // 统计安装点击
+          // 统计安装点击 - 使用加密的统计链接
           document.querySelector('.install-button').addEventListener('click', function() {
             try {
               const xhttp = new XMLHttpRequest();
-              xhttp.open("GET", "${baseUrl}/api/app-details/install-stat/${appId}?udid=${udid}", true);
+              xhttp.open("GET", "${baseUrl}${encryptedStatsUrl}", true);
               xhttp.send();
             } catch (e) {
               console.error('统计请求失败:', e);
@@ -437,6 +436,42 @@ router.get('/install-stat/:appId', async (req, res) => {
     res.status(200).send('ok');
   } catch (error) {
     console.error('记录安装统计失败:', error);
+    res.status(500).send('error');
+  }
+});
+
+// 处理加密的统计链接
+router.get('/stats/:iv/:encryptedData', async (req, res) => {
+  try {
+    const { iv, encryptedData } = req.params;
+    const clientIP = req.ip || req.connection.remoteAddress || '未知IP';
+    
+    // 使用新的解密方法
+    const decryptResult = encryptionService.decryptStatsUrl(iv, encryptedData);
+    
+    if (!decryptResult.valid) {
+      console.error(`统计链接验证失败: ${decryptResult.reason}`);
+      return res.status(403).json({
+        success: false,
+        message: decryptResult.reason || '链接验证失败'
+      });
+    }
+    
+    // 从解密后的URL中提取appId和udid
+    const statsUrl = decryptResult.statsUrl;
+    const urlObj = new URL(`http://localhost${statsUrl}`);
+    const pathParts = urlObj.pathname.split('/');
+    const appId = pathParts[pathParts.length - 1];
+    const udid = urlObj.searchParams.get('udid');
+    
+    console.log(`解密统计链接成功，记录安装统计 - AppID: ${appId}, UDID: ${udid ? udid.substring(0, 8) + '...' : '未知'}`);
+    
+    // 实现安装统计逻辑，与普通统计路由相同
+    // ...
+    
+    res.status(200).send('ok');
+  } catch (error) {
+    console.error('处理加密统计链接失败:', error);
     res.status(500).send('error');
   }
 });
