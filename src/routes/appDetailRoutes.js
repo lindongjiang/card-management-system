@@ -428,7 +428,13 @@ router.get('/install-page/:appId', async (req, res) => {
     
   } catch (error) {
     console.error('生成安装页面失败:', error);
-    res.status(500).send('生成安装页面时发生错误');
+    res.status(500).send(`
+      <html><body>
+        <h2>服务器错误</h2>
+        <p>生成安装页面时发生错误: ${error.message}</p>
+        <a href="javascript:window.close()">关闭</a>
+      </body></html>
+    `);
   }
 });
 
@@ -701,76 +707,6 @@ router.get('/check-udid/:appId', async (req, res) => {
       success: false,
       message: '服务器内部错误'
     });
-  }
-});
-
-// 新增：获取安装链接的API路由
-router.post('/get-install-url/:appId', async (req, res) => {
-  try {
-    // 检查参数
-    const appId = req.params.appId;
-    const { token, udid, sessionId, timestamp } = req.body;
-    
-    if (!appId || !token || !udid || !sessionId) {
-      console.error(`获取安装链接失败 - 缺少必要参数 - 应用ID: ${appId || '未提供'}, 令牌: ${token ? '已提供' : '未提供'}, UDID: ${udid ? udid.substring(0, 8) + '...' : '未提供'}, 会话ID: ${sessionId || '未提供'}`);
-      return res.status(400).json({ error: '缺少必要参数' });
-    }
-    
-    // 记录请求
-    const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-    console.log(`获取安装链接请求 - 应用ID: ${appId}, UDID: ${udid.substring(0, 8)}..., IP: ${clientIP}, 会话ID: ${sessionId.substring(0, 8)}...`);
-    
-    // 验证令牌 - 修复：确保传递所有必要参数
-    const tokenVerifyResult = encryptionService.verifySecurityToken(token, appId, udid, clientIP);
-    if (!tokenVerifyResult.valid) {
-      console.error(`获取安装链接令牌验证失败 - 应用ID: ${appId}, 原因: ${tokenVerifyResult.reason}`);
-      return res.status(401).json({ error: `安全验证失败: ${tokenVerifyResult.reason}` });
-    }
-    
-    // 检查应用是否存在
-    const app = await appService.getAppDetail(appId);
-    if (!app) {
-      return res.status(404).json({ error: '应用不存在' });
-    }
-    
-    // 检查应用是否需要密钥
-    const requiresKey = app.requires_key;
-    
-    // 构建plist URL路径
-    let plistPath = `/plist/${appId}`;
-    if (requiresKey) {
-      // 如果应用需要密钥，将令牌添加到URL
-      plistPath += `?token=${token}`;
-    }
-    
-    // 创建完整的plist URL（供服务器内部使用，不直接暴露给客户端）
-    const plistUrl = `${req.protocol}://${req.get('host')}${plistPath}`;
-    
-    // 使用新的组合方法创建并存储会话令牌
-    const securityToken = encryptionService.createSessionToken(
-      appId, 
-      udid, 
-      sessionId,
-      timestamp,
-      plistUrl
-    );
-    
-    if (!securityToken) {
-      console.error(`创建会话令牌失败 - 应用ID: ${appId}, 会话ID: ${sessionId.substring(0, 8)}...`);
-      return res.status(500).json({ error: '创建会话令牌失败' });
-    }
-    
-    // 构建带会话ID的安装URL，不直接返回plist URL
-    const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(`${req.protocol}://${req.get('host')}/plist/${appId}?udid=${udid}&session=${sessionId}&ts=${timestamp}`)}`;
-    
-    // 返回安装URL给客户端
-    res.json({
-      installUrl: installUrl
-    });
-    
-  } catch (error) {
-    console.error('获取安装链接失败:', error);
-    res.status(500).json({ error: '获取安装链接时发生错误' });
   }
 });
 
