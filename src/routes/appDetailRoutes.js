@@ -13,7 +13,9 @@ const router = express.Router();
 router.get('/install-page/:appId', async (req, res) => {
   try {
     const clientIP = req.ip || req.connection.remoteAddress || '未知IP';
-    console.log(`[${new Date().toISOString()}] 请求安装页面 - AppID: ${req.params.appId}, UDID: ${req.query.udid || '未提供'}, IP: ${clientIP}`);
+    const debugMode = req.query.debug === 'true'; // 添加调试模式参数
+    
+    console.log(`[${new Date().toISOString()}] 请求安装页面 - AppID: ${req.params.appId}, UDID: ${req.query.udid || '未提供'}, IP: ${clientIP}, Debug: ${debugMode}`);
     
     const { appId } = req.params;
     const { udid, token, device_info } = req.query;
@@ -101,11 +103,33 @@ router.get('/install-page/:appId', async (req, res) => {
     
     // 如果增强型token验证失败或不是增强型token，尝试验证标准token（向后兼容）
     if (!verifyResult || !verifyResult.valid) {
+      // 添加更详细的日志
+      console.log(`尝试验证标准Token - AppID: ${appId}, Token: ${token.substring(0, 15)}..., Token长度: ${token.length}`);
+      
       verifyResult = encryptionService.verifySecurityToken(token, appId, udid);
       console.log(`标准Token验证结果 - AppID: ${appId}, UDID: ${udid.substring(0, 8)}..., 结果: ${verifyResult.valid ? '成功' : '失败'}, 原因: ${verifyResult.reason || 'N/A'}`);
       
       if (!verifyResult.valid) {
-        console.error(`安装页面错误: 标准Token验证失败 - AppID: ${appId}, UDID: ${udid}, 原因: ${verifyResult.reason}`);
+        // 添加更多诊断信息到日志
+        console.error(`安装页面错误: 标准Token验证失败 - AppID: ${appId}, UDID: ${udid}, 原因: ${verifyResult.reason}, Token类型: 标准, Token首部: ${token.substring(0, 20)}...`);
+        
+        // 如果是调试模式，返回更详细的信息
+        if (debugMode) {
+          return res.status(403).send(`
+            <html><body>
+              <h2>链接已失效（调试模式）</h2>
+              <p>安装链接已过期或无效。</p>
+              <p>原因: ${verifyResult.reason}</p>
+              <p>AppID: ${appId}</p>
+              <p>UDID: ${udid.substring(0, 8)}***</p>
+              <p>Token类型: 标准</p>
+              <p>Token首部: ${token.substring(0, 20)}...</p>
+              <p>请从AppFlex应用内重新获取安装链接。</p>
+              <a href="javascript:window.close()">关闭</a>
+            </body></html>
+          `);
+        }
+        
         return res.status(403).send(`
           <html><body>
             <h2>链接已失效</h2>
@@ -241,16 +265,18 @@ router.get('/install-page/:appId', async (req, res) => {
     console.log(`生成安装链接 - AppID: ${appId}, plist URL: ${fullPlistUrl}`);
     console.log(`生成安装链接 - AppID: ${appId}, 安装URL: ${installUrl}`);
     
-    // 生成HTML安装页面时，添加诊断信息（仅在非生产环境下显示）
+    // 生成HTML安装页面时，添加诊断信息（总是在非生产环境下显示或调试模式下）
     let diagnosticInfo = '';
-    if (process.env.NODE_ENV !== 'production') {
+    if (debugMode || process.env.NODE_ENV !== 'production') {
       diagnosticInfo = `
         <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; font-size: 12px; color: #999;">
-          <p>诊断信息 (仅开发环境可见):</p>
+          <p>诊断信息 (调试模式可见):</p>
           <p>Token类型: ${tokenType}</p>
           <p>IP: ${clientIP}</p>
           <p>生成时间: ${new Date().toISOString()}</p>
           <p>请求路径: ${req.originalUrl}</p>
+          <p>Token首部: ${token.substring(0, 20)}...</p>
+          <p>Server Time: ${new Date().toISOString()}</p>
         </div>
       `;
     }

@@ -191,6 +191,36 @@ class EncryptionService {
         return { valid: false, reason: 'token已过期' };
       }
       
+      // 检查令牌使用情况 - 与增强型令牌使用相同逻辑
+      const tokenKey = `standard_${token}`;
+      if (usedTokens.has(tokenKey)) {
+        const tokenData = usedTokens.get(tokenKey);
+        
+        // 如果是同一设备，且使用次数未超过限制，允许继续使用
+        if (tokenData.udid === udid) {
+          if (tokenData.useCount >= MAX_TOKEN_USES_PER_DEVICE) {
+            console.log(`标准令牌使用次数超限 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
+            return { 
+              valid: false, 
+              reason: `安装链接已达到最大使用次数(${MAX_TOKEN_USES_PER_DEVICE}次)，请从AppFlex应用内重新获取安装链接` 
+            };
+          }
+          
+          // 更新使用次数
+          tokenData.useCount += 1;
+          tokenData.lastUsed = now;
+          usedTokens.set(tokenKey, tokenData);
+          
+          console.log(`标准令牌重复使用 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
+        } else {
+          console.log(`标准令牌被其他设备使用 - Token: ${token.substring(0, 15)}..., 记录UDID: ${tokenData.udid.substring(0, 8)}..., 当前UDID: ${udid.substring(0, 8)}...`);
+          return { 
+            valid: false, 
+            reason: '此安装链接已绑定到其他设备' 
+          };
+        }
+      }
+      
       // 重新生成签名进行验证
       const expectedSignature = crypto
         .createHmac('sha256', process.env.JWT_SECRET || this.key.toString('hex'))
@@ -199,6 +229,16 @@ class EncryptionService {
         
       if (signature !== expectedSignature) {
         return { valid: false, reason: '无效的签名' };
+      }
+      
+      // 首次使用令牌，记录信息
+      if (!usedTokens.has(tokenKey)) {
+        usedTokens.set(tokenKey, {
+          timestamp: now,
+          udid: udid,
+          useCount: 1,
+          lastUsed: now
+        });
       }
       
       return { valid: true, expiryTime: parseInt(expiryTime) };
