@@ -14,6 +14,7 @@ const userRoutes = require('./routes/userRoutes');
 const authRoutes = require('./routes/authRoutes');
 const clientRoutes = require('./routes/clientRoutes');
 const plistRoutes = require('./routes/plistRoutes');
+const appDetailRoutes = require('./routes/appDetailRoutes');
 const appModel = require('./models/appModel');
 const cardModel = require('./models/cardModel');
 
@@ -76,6 +77,7 @@ app.use('/api/cards', cardRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/plist', plistRoutes);
+app.use('/api/app-details', appDetailRoutes);
 
 // 主页
 app.get('/', (req, res) => {

@@ -1,0 +1,2 @@
+const appDetailRoutes = require('./routes/appDetailRoutes');
+app.use('/app', appDetailRoutes);
