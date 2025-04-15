@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const querystring = require('querystring');
+const url = require('url');
 
 // 存储已使用的令牌
 const usedTokens = new Map();
@@ -15,6 +17,9 @@ setInterval(() => {
     }
   }
 }, 60 * 1000); // 每分钟清理一次
+
+// 与iOS端相同的密钥
+const SERVER_SECRET = '6B3F9A1C7D4E2B5A8F1E0D3C6B9A2E5D';
 
 class EncryptionService {
   constructor() {
@@ -105,8 +110,8 @@ class EncryptionService {
               valid: false, 
               reason: `安装链接已达到最大使用次数(${MAX_TOKEN_USES_PER_DEVICE}次)，请从AppFlex应用内重新获取安装链接` 
             };
-          }
-          
+        }
+        
           // 更新使用次数
           tokenData.useCount += 1;
           tokenData.lastUsed = now;
@@ -151,7 +156,7 @@ class EncryptionService {
       }
       
       return { 
-        valid: true, 
+        valid: true,
         expiryTime: expiryTime,
         deviceInfo: deviceInfo,
         originalIP: originalIP
@@ -167,10 +172,11 @@ class EncryptionService {
     const timestamp = Date.now();
     const expiryTime = timestamp + (expiryMinutes * 60 * 1000);
     
-    // 使用JWT_SECRET创建签名
+    // 使用新的密钥和方法创建签名
+    const dataToSign = `${appId}_${udid}_${expiryTime}`;
     const signature = crypto
-      .createHmac('sha256', process.env.JWT_SECRET || this.key.toString('hex'))
-      .update(`${appId}_${udid}_${expiryTime}`)
+      .createHmac('sha256', SERVER_SECRET)
+      .update(dataToSign)
       .digest('hex');
       
     return {
@@ -179,11 +185,18 @@ class EncryptionService {
     };
   }
   
-  // 验证安全token（保留原方法以兼容旧版本）
+  // 验证安全token（使用新的密钥和方法验证）
   verifySecurityToken(token, appId, udid) {
     try {
+      console.log(`验证标准令牌: ${token}, AppID: ${appId}, UDID: ${udid.substring(0, 8)}...`);
+      
       // 解析token
-      const [expiryTime, signature] = token.split('_');
+      const parts = token.split('_');
+      if (parts.length !== 2) {
+        return { valid: false, reason: '无效的token格式' };
+      }
+      
+      const [expiryTime, signature] = parts;
       const now = Date.now();
       
       // 验证是否过期
@@ -204,8 +217,8 @@ class EncryptionService {
               valid: false, 
               reason: `安装链接已达到最大使用次数(${MAX_TOKEN_USES_PER_DEVICE}次)，请从AppFlex应用内重新获取安装链接` 
             };
-          }
-          
+        }
+        
           // 更新使用次数
           tokenData.useCount += 1;
           tokenData.lastUsed = now;
@@ -221,13 +234,15 @@ class EncryptionService {
         }
       }
       
-      // 重新生成签名进行验证
+      // 使用新的密钥和方法重新生成签名进行验证
+      const dataToSign = `${appId}_${udid}_${expiryTime}`;
       const expectedSignature = crypto
-        .createHmac('sha256', process.env.JWT_SECRET || this.key.toString('hex'))
-        .update(`${appId}_${udid}_${expiryTime}`)
+        .createHmac('sha256', SERVER_SECRET)
+        .update(dataToSign)
         .digest('hex');
         
       if (signature !== expectedSignature) {
+        console.log(`签名不匹配 - 期望: ${expectedSignature.substring(0, 15)}..., 实际: ${signature.substring(0, 15)}...`);
         return { valid: false, reason: '无效的签名' };
       }
       
