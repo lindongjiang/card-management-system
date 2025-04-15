@@ -8,11 +8,15 @@ const fs = require('fs');
 const usedTokens = new Map();
 const tokenExpiryTime = 15 * 60 * 1000; // 令牌有效期15分钟
 // 限制每个设备对每个令牌的最大使用次数
-const MAX_TOKEN_USES_PER_DEVICE = 2; // 降低为2次，加强安全性
+const MAX_TOKEN_USES_PER_DEVICE = 1; // 修改为1次，进一步加强安全性
 
 // 存储一次性确认码
 const confirmationCodes = new Map();
 const confirmationCodeExpiry = 10 * 60 * 1000; // 10分钟过期
+
+// 存储已使用的plist链接
+const usedPlistUrls = new Map();
+const plistUrlExpiry = 15 * 60 * 1000; // plist链接有效期15分钟
 
 // 生成一次性确认码
 function generateConfirmationCode() {
@@ -41,6 +45,13 @@ setInterval(() => {
   for (const [code, codeData] of confirmationCodes.entries()) {
     if (now - codeData.timestamp > confirmationCodeExpiry) {
       confirmationCodes.delete(code);
+    }
+  }
+  
+  // 清理过期plist链接
+  for (const [plistUrl, plistData] of usedPlistUrls.entries()) {
+    if (now - plistData.timestamp > plistUrlExpiry) {
+      usedPlistUrls.delete(plistUrl);
     }
   }
 }, 60 * 1000); // 每分钟清理一次
@@ -492,12 +503,17 @@ class EncryptionService {
       const expiryTime = timestamp + (15 * 60 * 1000); // 15分钟过期
       const random = Math.random().toString(36).substring(2, 15);
       
+      // 生成一个安全令牌，将绑定到HTML页面
+      const securityToken = crypto
+        .createHmac('sha256', this.key)
+        .update(`${plistUrl}_${timestamp}_${udid || 'no-udid'}_${clientIP || 'no-ip'}`)
+        .digest('hex');
+      
       // 如果提供了UDID和IP，加入数据增强安全性
-      let dataToEncrypt = `${plistUrl}|${expiryTime}|${random}`;
+      let dataToEncrypt = `${plistUrl}|${expiryTime}|${random}|${securityToken}`;
       if (udid) {
         dataToEncrypt += `|${udid}`;
       }
-      // 不再加入IP地址绑定，仅使用UDID
       
       const encrypted = this.encrypt(dataToEncrypt);
       
@@ -511,23 +527,53 @@ class EncryptionService {
   }
   
   // 解密并验证plist URL
-  decryptAndVerifyPlistUrl(iv, encryptedData, requestUdid = null, requestIP = null) {
+  decryptAndVerifyPlistUrl(iv, encryptedData, requestUdid = null, requestIP = null, htmlPageToken = null) {
     try {
       const decrypted = this.decrypt(encryptedData, iv);
       const parts = decrypted.split('|');
       
       // 验证格式是否正确
-      if (parts.length < 2) {
+      if (parts.length < 3) {
         return { valid: false, reason: '无效的plist链接格式' };
       }
       
-      const [plistUrl, expiryTimeStr, random, ...rest] = parts;
+      const [plistUrl, expiryTimeStr, random, securityToken, ...rest] = parts;
       const expiryTime = parseInt(expiryTimeStr);
       const now = Date.now();
       
       // 验证是否过期
       if (now > expiryTime) {
         return { valid: false, reason: 'plist链接已过期' };
+      }
+      
+      // 创建唯一标识符用于跟踪此plist URL的使用情况
+      const plistKey = `${iv}_${encryptedData}`;
+      
+      // 检查是否已使用过此plist链接
+      if (usedPlistUrls.has(plistKey)) {
+        console.log(`[加密服务] plist URL已被使用 - 原始URL: ${plistUrl.substring(0, 30)}..., UDID: ${requestUdid ? requestUdid.substring(0, 8) + '...' : '未提供'}`);
+        return { valid: false, reason: 'plist链接已被使用，请获取新的安装链接' };
+      }
+      
+      // 验证安全令牌 - 确保此链接是通过HTML页面访问的
+      // 如果提供了htmlPageToken参数，验证它是否与安全令牌匹配
+      // 如果没有提供htmlPageToken，将返回令牌供页面使用
+      if (htmlPageToken) {
+        // 用于HTML页面的链接验证
+        if (htmlPageToken !== securityToken) {
+          console.log(`[加密服务] 安全令牌不匹配 - 预期: ${securityToken.substring(0, 15)}..., 实际: ${htmlPageToken.substring(0, 15)}...`);
+          return { valid: false, reason: '安全验证失败，链接可能被篡改' };
+        }
+      } else {
+        // 如果没有提供htmlPageToken，返回令牌供HTML页面使用
+        // 但不允许直接使用plist
+        console.log(`[加密服务] 无安全令牌提供，返回令牌供HTML页面使用`);
+        return { 
+          valid: true, 
+          requiresHtmlAuth: true,
+          securityToken: securityToken,
+          expiryTime: expiryTime
+        };
       }
       
       // 如果包含UDID，验证是否匹配
@@ -538,7 +584,15 @@ class EncryptionService {
         }
       }
       
-      // 不再验证IP地址匹配
+      // 标记此plist链接为已使用
+      usedPlistUrls.set(plistKey, {
+        timestamp: now,
+        plistUrl: plistUrl,
+        udid: requestUdid,
+        ip: requestIP
+      });
+      
+      console.log(`[加密服务] plist URL首次使用 - 原始URL: ${plistUrl.substring(0, 30)}..., UDID: ${requestUdid ? requestUdid.substring(0, 8) + '...' : '未提供'}`);
       
       return { 
         valid: true, 
