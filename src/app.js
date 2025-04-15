@@ -79,6 +79,12 @@ app.use('/api/client', clientRoutes);
 app.use('/api/plist', plistRoutes);
 app.use('/api/app-details', appDetailRoutes);
 
+// 添加路由错误日志
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] 未匹配路由: ${req.method} ${req.url}`);
+  next();
+});
+
 // 主页
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));

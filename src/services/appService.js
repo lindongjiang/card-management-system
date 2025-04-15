@@ -73,25 +73,61 @@ class AppService {
   // 获取应用详情
   async getAppDetail(id) {
     try {
+      console.log(`[服务层] 获取应用详情 - AppID: ${id}`);
+      
+      // 对于测试ID，返回测试应用
+      if (id.toUpperCase().startsWith('TEST') || id.includes('test')) {
+        console.log(`[服务层] 检测到测试应用ID: ${id}，返回测试应用数据`);
+        return this.createTestApp(id);
+      }
+      
       const app = await appModel.getAppById(id);
       
       if (!app) {
+        console.log(`[服务层] 应用不存在 - AppID: ${id}`);
         return null;
       }
       
-      // 如果需要卡密，隐藏plist
-      if (app.requires_key) {
-        app.plist = null;
-      } else if (app.plist) {
-        // 加密plist链接
-        app.plist = encryptionService.generateEncryptedPlistUrl(app.plist);
+      console.log(`[服务层] 获取应用成功 - 应用名称: ${app.name}, 版本: ${app.version}, 需要卡密: ${app.requires_key}`);
+      
+      // 始终返回plist，让安装页面统一处理权限
+      let resultApp = { ...app };
+      
+      if (app.plist) {
+        try {
+          // 尝试加密plist链接，但不抛出异常
+          resultApp.plist = encryptionService.generateEncryptedPlistUrl(app.plist);
+          console.log(`[服务层] plist链接已加密处理 - AppID: ${id}`);
+        } catch (encryptError) {
+          console.error(`[服务层] plist链接加密失败 - AppID: ${id}, 错误:`, encryptError);
+          // 保留原始plist
+          resultApp.plist = app.plist;
+        }
+      } else {
+        console.log(`[服务层] 应用无plist链接 - AppID: ${id}`);
       }
       
-      return app;
+      return resultApp;
     } catch (error) {
-      console.error('获取应用详情错误:', error);
+      console.error('[服务层] 获取应用详情错误:', error);
       throw error;
     }
+  }
+
+  // 创建测试应用
+  createTestApp(id) {
+    console.log(`[服务层] 创建测试应用 - ID: ${id}`);
+    return {
+      id: id,
+      name: "测试应用",
+      version: "1.0.0",
+      description: "这是一个用于测试的应用",
+      icon: "https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/c2/c6/d8/c2c6d885-4a33-29b9-dac0-b229c0f8b845/AppIcon-1x_U007emarketing-0-7-0-85-220.png/246x0w.webp",
+      requires_key: 0,
+      plist: "https://renmai.cloudmantoub.online/public/plists/test_app.plist",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
   }
 
   // 更新应用卡密需求

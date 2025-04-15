@@ -39,11 +39,30 @@ class EncryptionService {
 
   // 生成加密的plist链接
   generateEncryptedPlistUrl(plistUrl) {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 15);
-    const dataToEncrypt = `${plistUrl}|${timestamp}|${random}`;
-    const encrypted = this.encrypt(dataToEncrypt);
-    return `/api/plist/${encrypted.iv}/${encrypted.encryptedData}`;
+    try {
+      // 如果plistUrl已经是加密格式，直接返回
+      if (plistUrl && plistUrl.startsWith('/api/plist/')) {
+        return plistUrl;
+      }
+      
+      // 确保plistUrl是有效的字符串
+      if (!plistUrl || typeof plistUrl !== 'string') {
+        console.error(`[加密服务] 无效的plist URL: ${plistUrl || '未定义'}`);
+        throw new Error('无效的plist URL');
+      }
+      
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 15);
+      const dataToEncrypt = `${plistUrl}|${timestamp}|${random}`;
+      const encrypted = this.encrypt(dataToEncrypt);
+      
+      console.log(`[加密服务] 成功加密plist URL - 原始: ${plistUrl.substring(0, 30)}...`);
+      return `/api/plist/${encrypted.iv}/${encrypted.encryptedData}`;
+    } catch (error) {
+      console.error(`[加密服务] 加密plist URL失败:`, error);
+      // 发生错误时，返回原始URL
+      return plistUrl; 
+    }
   }
 }
 
