@@ -25,6 +25,22 @@ router.get('/install-page/:appId', async (req, res) => {
       });
     }
     
+    // 验证token（如果提供了token）
+    if (token) {
+      const verifyResult = encryptionService.verifySecurityToken(token, appId, udid);
+      if (!verifyResult.valid) {
+        console.error(`安装页面错误: Token验证失败 - AppID: ${appId}, UDID: ${udid}, 原因: ${verifyResult.reason}`);
+        return res.status(403).json({
+          success: false,
+          message: `安装链接无效或已过期: ${verifyResult.reason}`
+        });
+      }
+      console.log(`Token验证成功 - AppID: ${appId}, UDID: ${udid}, 过期时间: ${new Date(verifyResult.expiryTime).toISOString()}`);
+    } else {
+      // 如果没有提供token，记录一下但继续处理（为了向后兼容）
+      console.log(`注意: 没有提供安全token - AppID: ${appId}, UDID: ${udid}, IP: ${req.ip}`);
+    }
+    
     // 获取应用详情
     let app;
     try {
