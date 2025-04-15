@@ -106,37 +106,102 @@ router.get('/install-page/:appId', async (req, res) => {
       // 添加更详细的日志
       console.log(`尝试验证标准Token - AppID: ${appId}, Token: ${token.substring(0, 15)}..., Token长度: ${token.length}`);
       
-      verifyResult = encryptionService.verifySecurityToken(token, appId, udid);
+      verifyResult = encryptionService.verifySecurityToken(token, appId, udid, clientIP);
       console.log(`标准Token验证结果 - AppID: ${appId}, UDID: ${udid.substring(0, 8)}..., 结果: ${verifyResult.valid ? '成功' : '失败'}, 原因: ${verifyResult.reason || 'N/A'}`);
       
       if (!verifyResult.valid) {
         // 添加更多诊断信息到日志
         console.error(`安装页面错误: 标准Token验证失败 - AppID: ${appId}, UDID: ${udid}, 原因: ${verifyResult.reason}, Token类型: 标准, Token首部: ${token.substring(0, 20)}...`);
         
+        // 自定义错误标题和样式
+        let errorTitle = '链接已失效';
+        let errorColor = '#e74c3c'; // 默认红色
+        
+        // 根据错误原因自定义提示
+        if (verifyResult.reason.includes('绑定到其他设备')) {
+          errorTitle = '设备限制';
+          errorColor = '#e67e22'; // 橙色
+        } else if (verifyResult.reason.includes('最大使用次数')) {
+          errorTitle = '使用次数超限';
+          errorColor = '#f39c12'; // 黄色
+        } else if (verifyResult.reason.includes('过期')) {
+          errorTitle = '链接已过期';
+          errorColor = '#3498db'; // 蓝色
+        }
+        
         // 如果是调试模式，返回更详细的信息
         if (debugMode) {
           return res.status(403).send(`
-            <html><body>
-              <h2>链接已失效（调试模式）</h2>
-              <p>安装链接已过期或无效。</p>
-              <p>原因: ${verifyResult.reason}</p>
-              <p>AppID: ${appId}</p>
-              <p>UDID: ${udid.substring(0, 8)}***</p>
-              <p>Token类型: 标准</p>
-              <p>Token首部: ${token.substring(0, 20)}...</p>
-              <p>请从AppFlex应用内重新获取安装链接。</p>
-              <a href="javascript:window.close()">关闭</a>
-            </body></html>
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>${errorTitle}（调试模式）</title>
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background-color: #f9f9f9; text-align: center; }
+                .container { width: 90%; max-width: 600px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                h2 { color: ${errorColor}; margin-bottom: 20px; }
+                p { color: #666; line-height: 1.6; }
+                .error-details { margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; text-align: left; border-left: 4px solid ${errorColor}; }
+                .debug-info { margin-top: 20px; padding: 15px; background-color: #f1f1f1; border-radius: 8px; text-align: left; font-family: monospace; font-size: 12px; }
+                .back-button { display: inline-block; background-color: #3498db; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 15px; font-weight: bold; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <h2>${errorTitle}（调试模式）</h2>
+                
+                <div class="error-details">
+                  <p>${verifyResult.reason}</p>
+                </div>
+                
+                <div class="debug-info">
+                  <p>AppID: ${appId}</p>
+                  <p>UDID: ${udid.substring(0, 8)}***</p>
+                  <p>IP: ${clientIP}</p>
+                  <p>Token类型: 标准</p>
+                  <p>Token首部: ${token.substring(0, 20)}...</p>
+                  <p>请求时间: ${new Date().toISOString()}</p>
+                </div>
+                
+                <p>请从AppFlex应用内重新获取安装链接。</p>
+                <a href="javascript:window.close()" class="back-button">关闭</a>
+              </div>
+            </body>
+            </html>
           `);
         }
         
+        // 标准模式下的错误提示
         return res.status(403).send(`
-          <html><body>
-            <h2>链接已失效</h2>
-            <p>安装链接已过期或无效。</p>
-            <p>请从AppFlex应用内重新获取安装链接。</p>
-            <a href="javascript:window.close()">关闭</a>
-          </body></html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${errorTitle}</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background-color: #f9f9f9; text-align: center; }
+              .container { width: 90%; max-width: 600px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+              h2 { color: ${errorColor}; margin-bottom: 20px; }
+              p { color: #666; line-height: 1.6; }
+              .error-details { margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; text-align: left; border-left: 4px solid ${errorColor}; }
+              .back-button { display: inline-block; background-color: #3498db; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 15px; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h2>${errorTitle}</h2>
+              
+              <div class="error-details">
+                <p>${verifyResult.reason}</p>
+                <p>安装链接绑定了特定设备和使用次数，无法在其他设备上使用。</p>
+              </div>
+              
+              <p>请返回AppFlex应用，重新获取安装链接。</p>
+              <a href="javascript:window.close()" class="back-button">关闭</a>
+            </div>
+          </body>
+          </html>
         `);
       }
     }

@@ -6,7 +6,16 @@ const url = require('url');
 const usedTokens = new Map();
 const tokenExpiryTime = 15 * 60 * 1000; // 令牌有效期15分钟
 // 限制每个设备对每个令牌的最大使用次数
-const MAX_TOKEN_USES_PER_DEVICE = 5;
+const MAX_TOKEN_USES_PER_DEVICE = 2; // 降低为2次，加强安全性
+
+// IP字符串转换为可读格式
+function formatIP(ip) {
+  // 处理IPv6格式的本地IP
+  if (ip.includes('::ffff:')) {
+    return ip.replace('::ffff:', '');
+  }
+  return ip;
+}
 
 // 定期清理过期令牌
 setInterval(() => {
@@ -186,9 +195,10 @@ class EncryptionService {
   }
   
   // 验证安全token（使用新的密钥和方法验证）
-  verifySecurityToken(token, appId, udid) {
+  verifySecurityToken(token, appId, udid, clientIP) {
     try {
-      console.log(`验证标准令牌: ${token}, AppID: ${appId}, UDID: ${udid.substring(0, 8)}...`);
+      const formattedIP = formatIP(clientIP || 'unknown');
+      console.log(`验证标准令牌: ${token}, AppID: ${appId}, UDID: ${udid.substring(0, 8)}..., IP: ${formattedIP}`);
       
       // 解析token
       const parts = token.split('_');
@@ -208,32 +218,44 @@ class EncryptionService {
       
       // 检查令牌使用情况 - 与增强型令牌使用相同逻辑
       const tokenKey = `standard_${token}`;
+      
+      // 强制设备绑定检查
       if (usedTokens.has(tokenKey)) {
         const tokenData = usedTokens.get(tokenKey);
         
-        // 如果是同一设备，且使用次数未超过限制，允许继续使用
-        if (tokenData.udid === udid) {
-          if (tokenData.useCount >= MAX_TOKEN_USES_PER_DEVICE) {
-            console.log(`标准令牌使用次数超限 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
-            return { 
-              valid: false, 
-              reason: `安装链接已达到最大使用次数(${MAX_TOKEN_USES_PER_DEVICE}次)，请从AppFlex应用内重新获取安装链接` 
-            };
-          }
+        // 记录详细的设备信息用于调试
+        console.log(`令牌使用记录 - 已记录UDID: ${tokenData.udid.substring(0, 8)}..., IP: ${tokenData.clientIP}`);
+        console.log(`当前请求 - UDID: ${udid.substring(0, 8)}..., IP: ${formattedIP}`);
         
-          // 更新使用次数
-          tokenData.useCount += 1;
-          tokenData.lastUsed = now;
-          usedTokens.set(tokenKey, tokenData);
-          
-          console.log(`标准令牌重复使用 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
-        } else {
-          console.log(`标准令牌被其他设备使用 - Token: ${token.substring(0, 15)}..., 记录UDID: ${tokenData.udid.substring(0, 8)}..., 当前UDID: ${udid.substring(0, 8)}...`);
+        // 检查是否为同一设备 - 检查UDID是否匹配
+        const isSameDevice = tokenData.udid === udid;
+        
+        if (!isSameDevice) {
+          console.log(`令牌被其他设备使用 - Token: ${token.substring(0, 15)}..., 记录UDID: ${tokenData.udid.substring(0, 8)}..., 当前UDID: ${udid.substring(0, 8)}...`);
           return { 
             valid: false, 
-            reason: '此安装链接已绑定到其他设备' 
+            reason: '此安装链接已绑定到其他设备，出于安全考虑，请在原设备上使用或获取新的安装链接' 
           };
         }
+        
+        // 检查使用次数是否超限
+        if (tokenData.useCount >= MAX_TOKEN_USES_PER_DEVICE) {
+          console.log(`令牌使用次数超限 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
+          return { 
+            valid: false, 
+            reason: `安装链接已达到最大使用次数(${MAX_TOKEN_USES_PER_DEVICE}次)，请从AppFlex应用内重新获取安装链接` 
+          };
+        }
+        
+        // 更新使用次数
+        tokenData.useCount += 1;
+        tokenData.lastUsed = now;
+        if (formattedIP && formattedIP !== 'unknown') {
+          tokenData.ipHistory.push(formattedIP);
+        }
+        usedTokens.set(tokenKey, tokenData);
+        
+        console.log(`令牌重复使用 - Token: ${token.substring(0, 15)}..., UDID: ${udid.substring(0, 8)}..., 使用次数: ${tokenData.useCount}`);
       }
       
       // 使用新的密钥和方法重新生成签名进行验证
@@ -288,21 +310,25 @@ class EncryptionService {
           const lenientMode = process.env.NODE_ENV !== 'production';
           if (lenientMode) {
             console.log("⚠️ 警告: 宽容模式下允许不匹配签名通过 (仅用于开发环境)");
-            // 在非生产环境下继续处理，即使签名不匹配
+            // 在宽容模式下继续处理，即使签名不匹配
           } else {
             return { valid: false, reason: '无效的签名' };
           }
         }
       }
       
-      // 首次使用令牌，记录信息
+      // 首次使用令牌，记录信息 - 确保即使在宽容模式下也记录
       if (!usedTokens.has(tokenKey)) {
-        usedTokens.set(tokenKey, {
+        const newTokenData = {
           timestamp: now,
           udid: udid,
           useCount: 1,
-          lastUsed: now
-        });
+          lastUsed: now,
+          clientIP: formattedIP,
+          ipHistory: [formattedIP]
+        };
+        usedTokens.set(tokenKey, newTokenData);
+        console.log(`首次使用令牌 - Token: ${token.substring(0, 15)}..., 绑定到UDID: ${udid.substring(0, 8)}..., IP: ${formattedIP}`);
       }
       
       return { valid: true, expiryTime: parseInt(expiryTime) };
