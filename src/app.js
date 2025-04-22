@@ -14,8 +14,10 @@ const userRoutes = require('./routes/userRoutes');
 const authRoutes = require('./routes/authRoutes');
 const clientRoutes = require('./routes/clientRoutes');
 const plistRoutes = require('./routes/plistRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 const appModel = require('./models/appModel');
 const cardModel = require('./models/cardModel');
+const settingsModel = require('./models/settingsModel');
 
 // 使用环境变量中的端口
 const PORT = process.env.PORT || 6677;
@@ -29,6 +31,9 @@ async function initialize() {
   
   // 初始化数据库
   await initDatabase();
+  
+  // 初始化设置表和默认配置
+  await settingsModel.ensureTable();
   
   // 创建上传目录
   const uploadDir = path.join(__dirname, '../public/uploads');
@@ -76,6 +81,7 @@ app.use('/api/cards', cardRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/plist', plistRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // 主页
 app.get('/', (req, res) => {

@@ -118,6 +118,17 @@ class ClientController {
       });
     }
   }
+
+  /**
+   * 简单的ping接口用于检查API状态
+   */
+  ping(req, res) {
+    res.status(200).json({
+      success: true,
+      message: 'pong',
+      timestamp: new Date().toISOString()
+    });
+  }
 }
 
 module.exports = new ClientController(); 

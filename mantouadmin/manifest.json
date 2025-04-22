@@ -68,5 +68,11 @@
     "uniStatistics" : {
         "enable" : false
     },
-    "vueVersion" : "3"
+    "vueVersion" : "3",
+    "h5" : {
+        "title" : "AppFlex管理面板",
+        "router" : {
+            "base" : "/h5/"
+        }
+    }
 }

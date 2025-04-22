@@ -50,43 +50,91 @@
 			"style": {
 				"navigationBarTitleText": "用户管理"
 			}
+		},
+		{
+			"path": "pages/login/index",
+			"style": {
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/home/index",
+			"style": {
+				"navigationBarTitleText": "主页"
+			}
+		},
+		{
+			"path": "pages/apps/list",
+			"style": {
+				"navigationBarTitleText": "应用管理"
+			}
+		},
+		{
+			"path": "pages/cards/list",
+			"style": {
+				"navigationBarTitleText": "卡密管理"
+			}
+		},
+		{
+			"path": "pages/cards/import",
+			"style": {
+				"navigationBarTitleText": "导入卡密"
+			}
+		},
+		{
+			"path": "pages/users/list",
+			"style": {
+				"navigationBarTitleText": "用户管理"
+			}
+		},
+		{
+			"path": "pages/settings/index",
+			"style": {
+				"navigationBarTitleText": "系统设置"
+			}
+		},
+		{
+			"path": "pages/settings/disguise",
+			"style": {
+				"navigationBarTitleText": "变身控制"
+			}
 		}
 	],
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "云服务管理系统",
+		"navigationBarTitleText": "卡密管理系统",
 		"navigationBarBackgroundColor": "#F8F8F8",
 		"backgroundColor": "#F8F8F8"
 	},
 	"tabBar": {
-		"color": "#999",
+		"color": "#7A7E83",
 		"selectedColor": "#007AFF",
-		"backgroundColor": "#FFFFFF",
 		"borderStyle": "black",
+		"backgroundColor": "#ffffff",
 		"list": [
 			{
-				"pagePath": "pages/index/index",
-				"text": "首页",
-				"iconPath": "static/tabbar/home.png",
-				"selectedIconPath": "static/tabbar/home-active.png"
+				"pagePath": "pages/home/index",
+				"iconPath": "static/images/tabbar/home.png",
+				"selectedIconPath": "static/images/tabbar/home-active.png",
+				"text": "首页"
 			},
 			{
-				"pagePath": "pages/apps/apps",
-				"text": "应用",
-				"iconPath": "static/tabbar/app.png",
-				"selectedIconPath": "static/tabbar/app-active.png"
+				"pagePath": "pages/apps/list",
+				"iconPath": "static/images/tabbar/apps.png",
+				"selectedIconPath": "static/images/tabbar/apps-active.png",
+				"text": "应用"
 			},
 			{
-				"pagePath": "pages/cards/cards",
-				"text": "卡密",
-				"iconPath": "static/tabbar/card.png",
-				"selectedIconPath": "static/tabbar/card-active.png"
+				"pagePath": "pages/cards/list",
+				"iconPath": "static/images/tabbar/cards.png",
+				"selectedIconPath": "static/images/tabbar/cards-active.png",
+				"text": "卡密"
 			},
 			{
-				"pagePath": "pages/user/user",
-				"text": "我的",
-				"iconPath": "static/tabbar/user.png",
-				"selectedIconPath": "static/tabbar/user-active.png"
+				"pagePath": "pages/settings/index",
+				"iconPath": "static/images/tabbar/settings.png",
+				"selectedIconPath": "static/images/tabbar/settings-active.png",
+				"text": "设置"
 			}
 		]
 	},
