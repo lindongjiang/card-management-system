@@ -23,4 +23,7 @@ router.get('/disguise', settingsController.getDisguiseSettings);
 // 更新变身设置
 router.put('/disguise', settingsController.updateDisguiseSettings);
 
+// 获取版本历史
+router.get('/version-history', settingsController.getVersionHistory);
+
 module.exports = router; 

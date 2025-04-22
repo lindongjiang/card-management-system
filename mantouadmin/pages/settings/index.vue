@@ -4,42 +4,28 @@
 			<text class="title">系统设置</text>
 		</view>
 		
-		<view class="section">
-			<view class="section-title">应用设置</view>
-			<view class="menu-list">
-				<view class="menu-item" @click="navigateTo('/pages/settings/disguise')">
-					<text class="menu-label">变身控制</text>
-					<text class="menu-arrow">></text>
+		<view class="settings-list">
+			<view class="setting-item" @click="navigateToDisguise">
+				<view class="setting-icon">
+					<text class="iconfont icon-transform">🔄</text>
 				</view>
-				<view class="menu-item">
-					<text class="menu-label">API基础URL</text>
-					<text class="menu-arrow">></text>
+				<view class="setting-content">
+					<text class="setting-title">变身控制</text>
+					<text class="setting-desc">管理应用变身和伪装方式</text>
 				</view>
-			</view>
-		</view>
-		
-		<view class="section">
-			<view class="section-title">系统信息</view>
-			<view class="menu-list">
-				<view class="menu-item">
-					<text class="menu-label">当前版本</text>
-					<text class="menu-value">{{version}}</text>
-				</view>
-				<view class="menu-item">
-					<text class="menu-label">API状态</text>
-					<view class="api-status" :class="{'online': apiOnline, 'offline': !apiOnline}">
-						<text>{{apiOnline ? '在线' : '离线'}}</text>
-					</view>
+				<view class="setting-arrow">
+					<text class="iconfont icon-right">></text>
 				</view>
 			</view>
-		</view>
-		
-		<view class="section">
-			<view class="section-title">账户设置</view>
-			<view class="menu-list">
-				<view class="menu-item" @click="logout">
-					<text class="menu-label danger">退出登录</text>
-					<text class="menu-arrow">></text>
+			
+			<!-- 其他设置项可以在这里添加 -->
+			<view class="setting-item">
+				<view class="setting-icon">
+					<text class="iconfont icon-info">ℹ️</text>
+				</view>
+				<view class="setting-content">
+					<text class="setting-title">系统信息</text>
+					<text class="setting-desc">版本: {{version}} | API状态: {{apiStatus}}</text>
 				</view>
 			</view>
 		</view>
@@ -47,52 +33,84 @@
 </template>
 
 <script>
+import config from '../../config/index.js';
+
 export default {
 	data() {
 		return {
-			version: this.$config.version,
-			apiOnline: true,
-			loading: false
+			version: config.version || '1.0.0',
+			apiStatus: '检查中...'
 		}
 	},
-	onShow() {
-		this.checkAPIStatus();
+	onLoad() {
+		// 检查API状态
+		this.checkApiStatus();
 	},
 	methods: {
-		navigateTo(url) {
-			uni.navigateTo({
-				url
-			});
+		navigateToDisguise() {
+			console.log('正在导航到变身控制页面');
+			
+			// 使用全局导航方法
+			if (uni.$navigateTo) {
+				uni.$navigateTo('/pages/settings/disguise');
+			} else {
+				// 备用导航方式
+				try {
+					uni.navigateTo({
+						url: '/pages/settings/disguise',
+						fail: (err) => {
+							console.error('导航失败:', err);
+							
+							// 尝试不带前导斜杠的路径
+							uni.navigateTo({
+								url: 'disguise',
+								fail: (err2) => {
+									console.error('备用导航也失败:', err2);
+									uni.showToast({
+										title: '无法打开变身控制页面',
+										icon: 'none'
+									});
+								}
+							});
+						}
+					});
+				} catch (e) {
+					console.error('导航异常:', e);
+					uni.showToast({
+						title: '页面跳转异常',
+						icon: 'none'
+					});
+				}
+			}
 		},
-		
-		checkAPIStatus() {
-			this.loading = true;
+		checkApiStatus() {
+			const apiUrl = config.apiBaseUrl || 'https://renmai.cloudmantoub.online';
+			console.log('检查API状态, URL:', apiUrl);
+			
+			// 使用ping接口检查状态
 			uni.request({
-				url: this.$config.apiBaseUrl + '/api/client/ping',
+				url: `${apiUrl}/api/client/ping`,
 				method: 'GET',
 				timeout: 5000,
-				success: () => {
-					this.apiOnline = true;
-				},
-				fail: () => {
-					this.apiOnline = false;
-				},
-				complete: () => {
-					this.loading = false;
-				}
-			});
-		},
-		
-		logout() {
-			uni.showModal({
-				title: '提示',
-				content: '确定要退出登录吗？',
 				success: (res) => {
-					if (res.confirm) {
-						uni.removeStorageSync('token');
-						uni.removeStorageSync('user');
-						uni.reLaunch({
-							url: '/pages/login/index'
+					console.log('API状态检查结果:', res);
+					if (res.statusCode === 200 && res.data && res.data.status === 'ok') {
+						this.apiStatus = '正常';
+					} else {
+						this.apiStatus = '异常';
+					}
+				},
+				fail: (err) => {
+					console.error('API状态检查失败:', err);
+					this.apiStatus = '离线';
+					
+					// 测试API连接
+					if (config.testApiConnection) {
+						config.testApiConnection((workingUrl, success) => {
+							if (success) {
+								this.apiStatus = '已恢复';
+								console.log('使用备用API URL:', workingUrl);
+							}
 						});
 					}
 				}
@@ -102,84 +120,70 @@ export default {
 }
 </script>
 
-<style>
+<style lang="scss">
 .container {
-	padding: 15px;
-	background-color: #f5f5f5;
-	min-height: 100vh;
+	padding: 20px;
 }
 
 .header {
-	padding: 15px 0;
-	margin-bottom: 15px;
+	margin-bottom: 30px;
+	
+	.title {
+		font-size: 24px;
+		font-weight: bold;
+	}
 }
 
-.title {
-	font-size: 20px;
-	font-weight: bold;
-}
-
-.section {
-	margin-bottom: 20px;
-}
-
-.section-title {
-	font-size: 16px;
-	color: #666;
-	margin-bottom: 10px;
-	padding-left: 5px;
-}
-
-.menu-list {
-	background-color: #fff;
-	border-radius: 10px;
-	overflow: hidden;
-}
-
-.menu-item {
-	display: flex;
-	flex-direction: row;
-	justify-content: space-between;
-	align-items: center;
-	padding: 15px;
-	border-bottom: 1px solid #f0f0f0;
-}
-
-.menu-item:last-child {
-	border-bottom: none;
-}
-
-.menu-label {
-	font-size: 16px;
-}
-
-.menu-value {
-	font-size: 16px;
-	color: #999;
-}
-
-.menu-arrow {
-	color: #ccc;
-	font-size: 18px;
-}
-
-.api-status {
-	padding: 3px 10px;
-	border-radius: 15px;
-	font-size: 14px;
-}
-
-.online {
-	background-color: #e1f3d8;
-	color: #67c23a;
-}
-
-.offline {
-	background-color: #fde2e2;
-	color: #f56c6c;
-}
-
-.danger {
-	color: #f56c6c;
+.settings-list {
+	.setting-item {
+		display: flex;
+		align-items: center;
+		padding: 15px;
+		margin-bottom: 15px;
+		background-color: #ffffff;
+		border-radius: 10px;
+		box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+		
+		&:active {
+			background-color: #f5f5f5;
+		}
+	}
+	
+	.setting-icon {
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: #f0f8ff;
+		border-radius: 50%;
+		margin-right: 15px;
+		
+		.iconfont {
+			font-size: 20px;
+			color: #409eff;
+		}
+	}
+	
+	.setting-content {
+		flex: 1;
+		
+		.setting-title {
+			font-size: 16px;
+			font-weight: 500;
+			margin-bottom: 5px;
+		}
+		
+		.setting-desc {
+			font-size: 12px;
+			color: #999;
+		}
+	}
+	
+	.setting-arrow {
+		.iconfont {
+			color: #ccc;
+		}
+	}
 }
 </style> 

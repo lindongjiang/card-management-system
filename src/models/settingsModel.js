@@ -22,11 +22,28 @@ class SettingsModel {
       
       await pool.query(createTableQuery);
       
+      // 创建版本历史记录表
+      const createHistoryTableQuery = `
+        CREATE TABLE IF NOT EXISTS version_history (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          setting_key VARCHAR(50) NOT NULL,
+          old_value VARCHAR(50),
+          new_value VARCHAR(50) NOT NULL,
+          changed_by VARCHAR(50),
+          changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+      
+      await pool.query(createHistoryTableQuery);
+      
       // 初始化默认设置
       const defaultSettings = [
         { key: 'api_base_url', value: 'https://renmai.cloudmantoub.online', type: 'string' },
         { key: 'disguise_enabled', value: 'true', type: 'boolean' },
-        { key: 'min_version_disguise', value: '1.0.0', type: 'string' }
+        { key: 'min_version_disguise', value: '1.0.0', type: 'string' },
+        { key: 'max_version_disguise', value: '', type: 'string' },
+        { key: 'version_blacklist', value: '[]', type: 'json' },
+        { key: 'version_whitelist', value: '[]', type: 'json' }
       ];
       
       for (const setting of defaultSettings) {
@@ -93,10 +110,44 @@ class SettingsModel {
   }
   
   /**
-   * 更新设置值
+   * 记录版本变更历史
    */
-  async updateSetting(key, value, type = null) {
+  async logVersionChange(key, oldValue, newValue, userId) {
     try {
+      await pool.query(
+        'INSERT INTO version_history (setting_key, old_value, new_value, changed_by) VALUES (?, ?, ?, ?)',
+        [key, oldValue, newValue, userId]
+      );
+      console.log(`记录版本变更: ${key} 从 ${oldValue} 到 ${newValue}`);
+    } catch (error) {
+      console.error('记录版本变更历史失败:', error);
+    }
+  }
+  
+  /**
+   * 获取版本变更历史
+   */
+  async getVersionHistory(key, limit = 10) {
+    try {
+      const [rows] = await pool.query(
+        'SELECT * FROM version_history WHERE setting_key = ? ORDER BY changed_at DESC LIMIT ?',
+        [key, limit]
+      );
+      return rows;
+    } catch (error) {
+      console.error('获取版本历史失败:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * 更新设置值 (增强版)
+   */
+  async updateSetting(key, value, type = null, userId = null) {
+    try {
+      // 获取旧值用于记录历史
+      const oldValue = await this.getSetting(key);
+      
       let valueToStore = value;
       
       // 如果提供了类型，先检查是否需要对值进行格式化
@@ -118,6 +169,11 @@ class SettingsModel {
           'UPDATE settings SET setting_value = ? WHERE setting_key = ?',
           [valueToStore, key]
         );
+      }
+      
+      // 记录版本相关设置的变更历史
+      if (key.includes('version')) {
+        await this.logVersionChange(key, oldValue, valueToStore, userId);
       }
       
       return true;

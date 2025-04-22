@@ -22,4 +22,7 @@ router.get('/check-udid', clientController.checkUdidStatus);
 // 检查变身状态
 router.get('/disguise-check', settingsController.checkDisguiseStatus);
 
+// 高级检查（允许POST请求带额外数据）
+router.post('/disguise-check', settingsController.checkDisguiseStatus);
+
 module.exports = router; 

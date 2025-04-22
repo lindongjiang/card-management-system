@@ -94,12 +94,22 @@ class SettingsController {
     try {
       const disguiseEnabled = await settingsModel.getSetting('disguise_enabled');
       const minVersionDisguise = await settingsModel.getSetting('min_version_disguise');
+      const maxVersionDisguise = await settingsModel.getSetting('max_version_disguise');
+      const versionBlacklist = await settingsModel.getSetting('version_blacklist');
+      const versionWhitelist = await settingsModel.getSetting('version_whitelist');
+      
+      // 获取版本变更历史
+      const versionHistory = await settingsModel.getVersionHistory('min_version_disguise', 5);
       
       return res.status(200).json({
         success: true,
         data: {
           disguise_enabled: disguiseEnabled,
-          min_version_disguise: minVersionDisguise
+          min_version_disguise: minVersionDisguise,
+          max_version_disguise: maxVersionDisguise,
+          version_blacklist: versionBlacklist,
+          version_whitelist: versionWhitelist,
+          version_history: versionHistory
         }
       });
     } catch (error) {
@@ -116,14 +126,80 @@ class SettingsController {
    */
   async updateDisguiseSettings(req, res) {
     try {
-      const { disguise_enabled, min_version_disguise } = req.body;
+      const { 
+        disguise_enabled, 
+        min_version_disguise, 
+        max_version_disguise,
+        version_blacklist,
+        version_whitelist
+      } = req.body;
+      
+      // 用户ID用于记录历史
+      const userId = req.user ? req.user.id : null;
       
       if (disguise_enabled !== undefined) {
-        await settingsModel.updateSetting('disguise_enabled', disguise_enabled, 'boolean');
+        await settingsModel.updateSetting('disguise_enabled', disguise_enabled, 'boolean', userId);
       }
       
+      // 版本格式验证
       if (min_version_disguise) {
-        await settingsModel.updateSetting('min_version_disguise', min_version_disguise, 'string');
+        if (!this.validateVersionFormat(min_version_disguise)) {
+          return res.status(400).json({
+            success: false,
+            message: '最小版本格式无效，请使用如1.0.0的格式'
+          });
+        }
+        await settingsModel.updateSetting('min_version_disguise', min_version_disguise, 'string', userId);
+      }
+      
+      if (max_version_disguise) {
+        if (!this.validateVersionFormat(max_version_disguise)) {
+          return res.status(400).json({
+            success: false,
+            message: '最大版本格式无效，请使用如1.0.0的格式'
+          });
+        }
+        await settingsModel.updateSetting('max_version_disguise', max_version_disguise, 'string', userId);
+        
+        // 验证最大版本不小于最小版本
+        const minVersion = await settingsModel.getSetting('min_version_disguise');
+        if (minVersion && verifyVersion(max_version_disguise, minVersion) < 0) {
+          return res.status(400).json({
+            success: false,
+            message: '最大版本不能小于最小版本'
+          });
+        }
+      }
+      
+      // 更新黑白名单
+      if (version_blacklist) {
+        // 验证黑名单中的版本号格式
+        if (Array.isArray(version_blacklist)) {
+          for (const version of version_blacklist) {
+            if (!this.validateVersionFormat(version)) {
+              return res.status(400).json({
+                success: false,
+                message: `黑名单中的版本 "${version}" 格式无效`
+              });
+            }
+          }
+        }
+        await settingsModel.updateSetting('version_blacklist', version_blacklist, 'json', userId);
+      }
+      
+      if (version_whitelist) {
+        // 验证白名单中的版本号格式
+        if (Array.isArray(version_whitelist)) {
+          for (const version of version_whitelist) {
+            if (!this.validateVersionFormat(version)) {
+              return res.status(400).json({
+                success: false,
+                message: `白名单中的版本 "${version}" 格式无效`
+              });
+            }
+          }
+        }
+        await settingsModel.updateSetting('version_whitelist', version_whitelist, 'json', userId);
       }
       
       return res.status(200).json({
@@ -166,15 +242,46 @@ class SettingsController {
       // 获取变身设置
       const disguiseEnabled = await settingsModel.getSetting('disguise_enabled');
       const minVersionDisguise = await settingsModel.getSetting('min_version_disguise');
+      const maxVersionDisguise = await settingsModel.getSetting('max_version_disguise');
+      const versionBlacklist = await settingsModel.getSetting('version_blacklist') || [];
+      const versionWhitelist = await settingsModel.getSetting('version_whitelist') || [];
       
       // 根据版本判断是否需要变身
       let shouldDisguise = disguiseEnabled;
+      let disableReason = null;
       
-      if (version && minVersionDisguise) {
-        // 如果客户端版本低于最小变身版本，则不需要变身
-        const versionCompare = verifyVersion(version, minVersionDisguise);
-        if (versionCompare < 0) {
-          shouldDisguise = false;
+      if (version) {
+        // 检查白名单优先
+        if (Array.isArray(versionWhitelist) && versionWhitelist.length > 0) {
+          // 如果有白名单，只有在白名单中的版本才可以变身
+          shouldDisguise = versionWhitelist.includes(version);
+          if (!shouldDisguise) {
+            disableReason = '版本不在白名单中';
+          }
+        } else {
+          // 检查版本是否在黑名单中
+          if (Array.isArray(versionBlacklist) && versionBlacklist.includes(version)) {
+            shouldDisguise = false;
+            disableReason = '版本在黑名单中';
+          }
+          
+          // 检查最小版本要求
+          if (shouldDisguise && minVersionDisguise) {
+            const versionCompare = verifyVersion(version, minVersionDisguise);
+            if (versionCompare < 0) {
+              shouldDisguise = false;
+              disableReason = '版本低于最小要求';
+            }
+          }
+          
+          // 检查最大版本限制
+          if (shouldDisguise && maxVersionDisguise) {
+            const versionCompare = verifyVersion(version, maxVersionDisguise);
+            if (versionCompare > 0) {
+              shouldDisguise = false;
+              disableReason = '版本高于最大限制';
+            }
+          }
         }
       }
       
@@ -187,7 +294,9 @@ class SettingsController {
         data: {
           disguise_enabled: shouldDisguise,
           min_version: minVersionDisguise || '1.0.0',
-          expiration_time: expirationTime
+          max_version: maxVersionDisguise || '',
+          expiration_time: expirationTime,
+          disable_reason: disableReason
         }
       });
     } catch (error) {
@@ -201,6 +310,45 @@ class SettingsController {
           min_version: '1.0.0',
           expiration_time: Math.floor(Date.now() / 1000) + 3600  // 默认1小时后过期
         }
+      });
+    }
+  }
+  
+  /**
+   * 验证版本格式
+   * @param {string} version 版本字符串
+   * @returns {boolean} 是否为有效的版本格式
+   */
+  validateVersionFormat(version) {
+    const versionRegex = /^\d+\.\d+\.\d+$/;
+    return versionRegex.test(version);
+  }
+  
+  /**
+   * 获取版本变更历史
+   */
+  async getVersionHistory(req, res) {
+    try {
+      const { key, limit = 10 } = req.query;
+      
+      if (!key) {
+        return res.status(400).json({
+          success: false,
+          message: '需要指定设置键'
+        });
+      }
+      
+      const history = await settingsModel.getVersionHistory(key, parseInt(limit));
+      
+      return res.status(200).json({
+        success: true,
+        data: history
+      });
+    } catch (error) {
+      console.error('获取版本历史失败:', error);
+      return res.status(500).json({
+        success: false,
+        message: '获取版本历史失败，请稍后重试'
       });
     }
   }
