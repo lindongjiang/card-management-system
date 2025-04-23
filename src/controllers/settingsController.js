@@ -126,91 +126,58 @@ class SettingsController {
    */
   async updateDisguiseSettings(req, res) {
     try {
-      const { 
-        disguise_enabled, 
-        min_version_disguise, 
-        max_version_disguise,
-        version_blacklist,
-        version_whitelist
-      } = req.body;
-      
-      // 用户ID用于记录历史
-      const userId = req.user ? req.user.id : null;
-      
-      if (disguise_enabled !== undefined) {
-        await settingsModel.updateSetting('disguise_enabled', disguise_enabled, 'boolean', userId);
+      const userId = req.user.id;
+      const settings = req.body;
+
+      // 验证必要字段
+      if (!settings.min_version_disguise || !settings.max_version_disguise) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少必要参数'
+        });
       }
-      
-      // 版本格式验证
-      if (min_version_disguise) {
-        if (!this.validateVersionFormat(min_version_disguise)) {
-          return res.status(400).json({
-            success: false,
-            message: '最小版本格式无效，请使用如1.0.0的格式'
-          });
-        }
-        await settingsModel.updateSetting('min_version_disguise', min_version_disguise, 'string', userId);
+
+      // 验证版本格式
+      if (!verifyVersion(settings.min_version_disguise) || 
+          !verifyVersion(settings.max_version_disguise)) {
+        return res.status(400).json({
+          success: false,
+          message: '版本格式不正确'
+        });
       }
-      
-      if (max_version_disguise) {
-        if (!this.validateVersionFormat(max_version_disguise)) {
-          return res.status(400).json({
-            success: false,
-            message: '最大版本格式无效，请使用如1.0.0的格式'
-          });
-        }
-        await settingsModel.updateSetting('max_version_disguise', max_version_disguise, 'string', userId);
-        
-        // 验证最大版本不小于最小版本
-        const minVersion = await settingsModel.getSetting('min_version_disguise');
-        if (minVersion && verifyVersion(max_version_disguise, minVersion) < 0) {
-          return res.status(400).json({
-            success: false,
-            message: '最大版本不能小于最小版本'
-          });
-        }
+
+      // 验证版本范围
+      if (verifyVersion(settings.min_version_disguise, settings.max_version_disguise) > 0) {
+        return res.status(400).json({
+          success: false,
+          message: '最小版本不能大于最大版本'
+        });
       }
-      
-      // 更新黑白名单
-      if (version_blacklist) {
-        // 验证黑名单中的版本号格式
-        if (Array.isArray(version_blacklist)) {
-          for (const version of version_blacklist) {
-            if (!this.validateVersionFormat(version)) {
-              return res.status(400).json({
-                success: false,
-                message: `黑名单中的版本 "${version}" 格式无效`
-              });
-            }
-          }
-        }
-        await settingsModel.updateSetting('version_blacklist', version_blacklist, 'json', userId);
+
+      // 更新设置
+      const result = await settingsModel.updateSetting(userId, 'disguise', {
+        ...settings,
+        updated_at: new Date()
+      });
+
+      if (!result) {
+        return res.status(500).json({
+          success: false,
+          message: '更新设置失败'
+        });
       }
-      
-      if (version_whitelist) {
-        // 验证白名单中的版本号格式
-        if (Array.isArray(version_whitelist)) {
-          for (const version of version_whitelist) {
-            if (!this.validateVersionFormat(version)) {
-              return res.status(400).json({
-                success: false,
-                message: `白名单中的版本 "${version}" 格式无效`
-              });
-            }
-          }
-        }
-        await settingsModel.updateSetting('version_whitelist', version_whitelist, 'json', userId);
-      }
-      
-      return res.status(200).json({
+
+      res.json({
         success: true,
-        message: '变身设置更新成功'
+        message: '更新设置成功',
+        data: result
       });
     } catch (error) {
       console.error('更新变身设置失败:', error);
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
-        message: '更新变身设置失败，请稍后重试'
+        message: '更新变身设置失败，请稍后重试',
+        error: error.message
       });
     }
   }

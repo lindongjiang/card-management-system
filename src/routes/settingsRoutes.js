@@ -26,4 +26,7 @@ router.put('/disguise', settingsController.updateDisguiseSettings);
 // 获取版本历史
 router.get('/version-history', settingsController.getVersionHistory);
 
+// 检查版本状态（不需要管理员权限）
+router.get('/disguise-check', settingsController.checkDisguiseStatus);
+
 module.exports = router; 
