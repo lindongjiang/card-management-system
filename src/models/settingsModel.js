@@ -159,17 +159,45 @@ class SettingsModel {
         valueToStore = value.toString();
       }
       
-      if (type) {
-        await pool.query(
-          'UPDATE settings SET setting_value = ?, setting_type = ? WHERE setting_key = ?',
-          [valueToStore, type, key]
+      // 构建更新语句
+      let updateQuery = 'UPDATE settings SET setting_value = ?, setting_type = ?';
+      const queryParams = [valueToStore, type || 'string'];
+      
+      // 如果是变身设置，需要更新多个字段
+      if (key === 'disguise') {
+        updateQuery = `
+          UPDATE settings 
+          SET setting_value = ?,
+              setting_type = ?,
+              min_version_disguise = ?,
+              max_version_disguise = ?,
+              version_blacklist = ?,
+              version_whitelist = ?,
+              disguise_enabled = ?,
+              updated_at = ?
+          WHERE setting_key = 'disguise'
+        `;
+        
+        // 确保数组类型的值被正确序列化
+        const blacklist = Array.isArray(value.version_blacklist) ? JSON.stringify(value.version_blacklist) : '[]';
+        const whitelist = Array.isArray(value.version_whitelist) ? JSON.stringify(value.version_whitelist) : '[]';
+        
+        queryParams.push(
+          value.min_version_disguise || '',
+          value.max_version_disguise || '',
+          blacklist,
+          whitelist,
+          value.disguise_enabled ? 'true' : 'false',
+          new Date()
         );
       } else {
-        await pool.query(
-          'UPDATE settings SET setting_value = ? WHERE setting_key = ?',
-          [valueToStore, key]
-        );
+        updateQuery += ' WHERE setting_key = ?';
+        queryParams.push(key);
       }
+      
+      console.log('执行SQL更新:', updateQuery, queryParams);
+      
+      await pool.query(updateQuery, queryParams);
       
       // 记录版本相关设置的变更历史
       if (key.includes('version')) {
