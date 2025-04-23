@@ -1,5 +1,5 @@
 const settingsModel = require('../models/settingsModel');
-const { verifyVersion } = require('../utils/versionUtils');
+const { verifyVersion, isValidVersion } = require('../utils/versionUtils');
 
 /**
  * 设置控制器，负责处理设置相关的请求
@@ -129,25 +129,52 @@ class SettingsController {
       const userId = req.user.id;
       const settings = req.body;
 
+      console.log('收到更新变身设置请求:', {
+        userId,
+        settings
+      });
+
       // 验证必要字段
       if (!settings.min_version_disguise || !settings.max_version_disguise) {
         return res.status(400).json({
           success: false,
-          message: '缺少必要参数'
+          message: '缺少必要参数：最小版本和最大版本'
         });
       }
 
+      // 清理版本号
+      const minVersion = String(settings.min_version_disguise).trim();
+      const maxVersion = String(settings.max_version_disguise).trim();
+
+      console.log('处理后的版本信息:', {
+        minVersion,
+        maxVersion,
+        type: {
+          minVersion: typeof minVersion,
+          maxVersion: typeof maxVersion
+        }
+      });
+
       // 验证版本格式
-      if (!verifyVersion(settings.min_version_disguise) || 
-          !verifyVersion(settings.max_version_disguise)) {
+      if (!isValidVersion(minVersion)) {
+        console.log('最小版本格式验证失败:', minVersion);
         return res.status(400).json({
           success: false,
-          message: '版本格式不正确'
+          message: `最小版本格式不正确: ${minVersion}，请使用 x.y.z 格式`
+        });
+      }
+
+      if (!isValidVersion(maxVersion)) {
+        console.log('最大版本格式验证失败:', maxVersion);
+        return res.status(400).json({
+          success: false,
+          message: `最大版本格式不正确: ${maxVersion}，请使用 x.y.z 格式`
         });
       }
 
       // 验证版本范围
-      if (verifyVersion(settings.min_version_disguise, settings.max_version_disguise) > 0) {
+      if (verifyVersion(minVersion, maxVersion) > 0) {
+        console.log('版本范围验证失败:', { minVersion, maxVersion });
         return res.status(400).json({
           success: false,
           message: '最小版本不能大于最大版本'
@@ -157,6 +184,8 @@ class SettingsController {
       // 更新设置
       const result = await settingsModel.updateSetting(userId, 'disguise', {
         ...settings,
+        min_version_disguise: minVersion,
+        max_version_disguise: maxVersion,
         updated_at: new Date()
       });
 

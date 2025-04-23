@@ -138,8 +138,12 @@ export default {
 			}
 		},
 		validateVersion(version) {
+			if (!version) return false;
+			// 确保version是字符串类型
+			const versionStr = String(version).trim();
+			// 验证格式
 			const versionRegex = /^\d+\.\d+\.\d+$/;
-			return versionRegex.test(version);
+			return versionRegex.test(versionStr);
 		},
 		addToBlacklist() {
 			if (!this.newBlacklistVersion || !this.validateVersion(this.newBlacklistVersion)) {
@@ -183,9 +187,22 @@ export default {
 		},
 		async applyChanges() {
 			try {
+				// 清理版本号
+				const minVersion = String(this.minVersionDisguise).trim();
+				const maxVersion = String(this.maxVersionDisguise).trim();
+				
+				// 验证版本号
+				if (!this.validateVersion(minVersion) || !this.validateVersion(maxVersion)) {
+					uni.showToast({
+						title: '版本号格式不正确，请使用 x.y.z 格式',
+						icon: 'none'
+					});
+					return;
+				}
+
 				const settings = {
-					min_version_disguise: this.minVersionDisguise,
-					max_version_disguise: this.maxVersionDisguise,
+					min_version_disguise: minVersion,
+					max_version_disguise: maxVersion,
 					version_blacklist: this.versionBlacklist,
 					version_whitelist: this.versionWhitelist
 				};
